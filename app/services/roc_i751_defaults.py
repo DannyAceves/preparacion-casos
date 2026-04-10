@@ -711,6 +711,7 @@ async def _ensure_questionnaire_template(session: AsyncSession, case_type: str) 
         .order_by(QuestionnaireTemplate.version.desc())
     )
     template = result.scalars().first()
+    existing_sections: list[QuestionnaireSection] = []
     if template is None:
         template = QuestionnaireTemplate(
             case_type=case_type,
@@ -721,8 +722,10 @@ async def _ensure_questionnaire_template(session: AsyncSession, case_type: str) 
         )
         session.add(template)
         await session.flush()
+    else:
+        existing_sections = list(template.sections)
 
-    section_map = {section.title.strip().lower(): section for section in template.sections}
+    section_map = {section.title.strip().lower(): section for section in existing_sections}
     for section_index, section_data in enumerate(ROC_QUESTIONNAIRE_TEMPLATE["sections"], start=1):
         section = section_map.get(section_data["title"].strip().lower())
         if section is None:
@@ -734,7 +737,9 @@ async def _ensure_questionnaire_template(session: AsyncSession, case_type: str) 
             )
             session.add(section)
             await session.flush()
-        question_keys = {question.key for question in section.questions}
+            question_keys: set[str] = set()
+        else:
+            question_keys = {question.key for question in section.questions}
         for question_index, question_data in enumerate(section_data["questions"], start=1):
             if question_data["key"] in question_keys:
                 continue
@@ -753,6 +758,7 @@ async def _ensure_questionnaire_template(session: AsyncSession, case_type: str) 
                     field_config=question_data.get("field_config"),
                 )
             )
+            question_keys.add(question_data["key"])
     await session.flush()
 
 
