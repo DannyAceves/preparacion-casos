@@ -3,18 +3,20 @@ services:
     image: postgres:16-alpine
     container_name: caseprep-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-caseprep}
-      POSTGRES_USER: ${POSTGRES_USER:-caseprep}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-caseprep}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${DOCKER_POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-caseprep} -d ${POSTGRES_DB:-caseprep}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
@@ -39,6 +41,9 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-staging}
       APP_DEBUG: ${APP_DEBUG:-false}
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
@@ -55,6 +60,7 @@ services:
       retries: 10
     command: >
       sh -c "alembic upgrade head &&
+      python scripts/seed.py &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
   worker:
@@ -67,6 +73,9 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-staging}
       APP_DEBUG: ${APP_DEBUG:-false}
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - backend_storage:/app/storage
     depends_on:
@@ -111,6 +120,10 @@ services:
     env_file:
       - .env
     profiles: ["tools"]
+    environment:
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - backend_storage:/app/storage
     depends_on:
@@ -127,10 +140,16 @@ services:
     env_file:
       - .env
     profiles: ["tools"]
+    environment:
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - backend_storage:/app/storage
     depends_on:
-      api:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: python scripts/seed.py
 
@@ -141,6 +160,10 @@ services:
     env_file:
       - .env
     profiles: ["tools"]
+    environment:
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - backend_storage:/app/storage
     depends_on:

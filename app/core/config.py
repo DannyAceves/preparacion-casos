@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = Field(default="/api/v1", alias="API_V1_PREFIX")
     database_url: str = Field(alias="DATABASE_URL")
     alembic_database_url: str = Field(alias="ALEMBIC_DATABASE_URL")
+    db_schema: str = Field(default="caseproces", alias="DB_SCHEMA")
     redis_url: str = Field(alias="REDIS_URL")
     frontend_app_url: str = Field(default="http://localhost:3000", alias="FRONTEND_APP_URL")
     local_storage_path: str = Field(default="/app/storage/uploads", alias="LOCAL_STORAGE_PATH")
@@ -66,6 +67,16 @@ class Settings(BaseSettings):
         if value <= 0:
             raise ValueError("DOCUMENT_MAX_SIZE_BYTES must be greater than zero")
         return value
+
+    @field_validator("db_schema")
+    @classmethod
+    def validate_db_schema(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("DB_SCHEMA must not be empty")
+        if not normalized.replace("_", "").isalnum() or not normalized[0].isalpha():
+            raise ValueError("DB_SCHEMA must start with a letter and contain only letters, numbers, and underscores")
+        return normalized
 
     @model_validator(mode="after")
     def validate_runtime_configuration(self) -> "Settings":

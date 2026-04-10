@@ -5,12 +5,16 @@ import { ChangeEvent, useEffect, useState } from "react";
 import {
   buildQuestionMap,
   getInitialQuestionValue,
+  getInitialRepeatableGroupValue,
+  getRepeatableGroupFieldNames,
+  getRepeatableGroupItemLabel,
   isQuestionVisible,
   parseQuestionDraftValue,
 } from "@/lib/questionnaire";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormFeedback } from "@/components/ui/form-feedback";
+import { RepeatableGroupField } from "@/components/questionnaire/repeatable-group-field";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { saveClientPortalAnswer } from "@/services/client-portal";
 import { CaseQuestionnaire, QuestionnaireQuestion } from "@/types/workspace";
@@ -31,12 +35,14 @@ function ClientPortalQuestionField({
   onRefresh: () => Promise<void>;
 }): JSX.Element {
   const [draftValue, setDraftValue] = useState(getInitialQuestionValue(question));
+  const [groupDraftValue, setGroupDraftValue] = useState(getInitialRepeatableGroupValue(question));
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftValue(getInitialQuestionValue(question));
+    setGroupDraftValue(getInitialRepeatableGroupValue(question));
     setFeedback(null);
     setError(null);
   }, [question]);
@@ -50,12 +56,15 @@ function ClientPortalQuestionField({
       await saveClientPortalAnswer({
         portalSessionToken,
         question,
-        value: parseQuestionDraftValue(question, draftValue),
+        value:
+          question.input_type === "repeatable_group"
+            ? { answer_json: groupDraftValue }
+            : parseQuestionDraftValue(question, draftValue),
       });
       await onRefresh();
-      setFeedback("Progress saved.");
+      setFeedback("Progreso guardado.");
     } catch (saveError) {
-      setError(getApiErrorMessage(saveError, "Could not save answer."));
+      setError(getApiErrorMessage(saveError, "No se pudo guardar la respuesta."));
     } finally {
       setSaving(false);
     }
@@ -80,8 +89,8 @@ function ClientPortalQuestionField({
     if (question.input_type === "boolean" || question.input_type === "checkbox") {
       return (
         <select value={draftValue} onChange={(event) => setDraftValue(event.target.value)}>
-          <option value="">Select an option</option>
-          <option value="true">Yes</option>
+          <option value="">Seleccione una opcion</option>
+          <option value="true">Si</option>
           <option value="false">No</option>
         </select>
       );
@@ -90,7 +99,7 @@ function ClientPortalQuestionField({
     if (question.input_type === "single_select" || question.input_type === "select") {
       return (
         <select value={draftValue} onChange={(event) => setDraftValue(event.target.value)}>
-          <option value="">Select an option</option>
+          <option value="">Seleccione una opcion</option>
           {(question.options ?? []).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -124,7 +133,18 @@ function ClientPortalQuestionField({
         <input
           value={draftValue}
           onChange={(event) => setDraftValue(event.target.value)}
-          placeholder="Comma-separated values"
+          placeholder="Valores separados por coma"
+        />
+      );
+    }
+
+    if (question.input_type === "repeatable_group") {
+      return (
+        <RepeatableGroupField
+          itemLabel={getRepeatableGroupItemLabel(question)}
+          fieldNames={getRepeatableGroupFieldNames(question)}
+          value={groupDraftValue}
+          onChange={setGroupDraftValue}
         />
       );
     }
@@ -135,11 +155,7 @@ function ClientPortalQuestionField({
         value={draftValue}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraftValue(event.target.value)}
         rows={6}
-        placeholder={
-          question.input_type === "repeatable_group"
-            ? '[{"field":"value"}]'
-            : '{"key":"value"}'
-        }
+        placeholder='{"clave":"valor"}'
       />
     );
   }
@@ -149,14 +165,14 @@ function ClientPortalQuestionField({
       <div className="questionnaire-field__header">
         <div>
           <strong>{question.prompt}</strong>
-          <p>{question.is_required ? "Required" : "Optional"}</p>
+          <p>{question.is_required ? "Obligatoria" : "Opcional"}</p>
         </div>
       </div>
 
       {question.help_text ? <p className="questionnaire-field__help">{question.help_text}</p> : null}
 
       <label className="ui-field">
-        <span>Answer</span>
+        <span>Respuesta</span>
         {renderInput()}
       </label>
 
@@ -164,7 +180,7 @@ function ClientPortalQuestionField({
       {feedback ? <FormFeedback tone="success" message={feedback} /> : null}
 
       <button type="button" className="ui-button" disabled={saving} onClick={() => void handleSave()}>
-        {saving ? "Saving..." : question.answer?.id ? "Update response" : "Save response"}
+        {saving ? "Guardando..." : question.answer?.id ? "Actualizar respuesta" : "Guardar respuesta"}
       </button>
     </div>
   );
@@ -177,10 +193,10 @@ export function ClientPortalQuestionnairePanel({
 }: ClientPortalQuestionnairePanelProps): JSX.Element {
   if (!questionnaire || !questionnaire.sections.length) {
     return (
-      <Card title="Questionnaire" subtitle="Digital intake form">
+      <Card title="Cuestionario" subtitle="Formulario digital del cliente">
         <EmptyState
-          title="No questionnaire assigned"
-          description="Your legal team has not published a questionnaire for this case type yet."
+          title="No hay cuestionario asignado"
+          description="Tu equipo legal aun no ha publicado un cuestionario para este tipo de caso."
         />
       </Card>
     );
@@ -194,7 +210,7 @@ export function ClientPortalQuestionnairePanel({
         <Card
           key={section.id}
           title={section.title}
-          subtitle={section.description ?? "Complete each question and save progress as you go."}
+          subtitle={section.description ?? "Completa cada pregunta y guarda tu avance conforme avances."}
         >
           <div className="page-stack">
             {section.questions

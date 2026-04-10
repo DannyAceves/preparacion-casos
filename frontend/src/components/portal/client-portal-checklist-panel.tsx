@@ -9,11 +9,11 @@ interface ClientPortalChecklistPanelProps {
 
 function requirementBadges(item: CaseDocumentChecklistItem): string[] {
   const badges: string[] = [];
-  if (item.color_required) badges.push("Color required");
-  if (item.english_translation_required) badges.push("English translation");
-  if (item.signed_copy_required) badges.push("Signed copy");
-  if (item.original_required) badges.push("Original required");
-  if (item.copy_only) badges.push("Copy only");
+  if (item.color_required) badges.push("Color");
+  if (item.english_translation_required) badges.push("Traduccion al ingles");
+  if (item.signed_copy_required) badges.push("Con firma");
+  if (item.original_required) badges.push("Original");
+  if (item.copy_only) badges.push("Solo copia");
   return badges;
 }
 
@@ -24,13 +24,13 @@ export function ClientPortalChecklistPanel({
 
   return (
     <Card
-      title="Document Checklist"
-      subtitle={`Progress ${checklist.progress.percent_complete}% · ${checklist.progress.received_items}/${checklist.progress.applicable_items} received`}
+      title="Lista de documentos"
+      subtitle={`Avance ${checklist.progress.percent_complete}% · ${checklist.progress.received_items}/${checklist.progress.applicable_items} recibidos`}
     >
       {!orderedItems.length ? (
         <EmptyState
-          title="No checklist published"
-          description="Your legal team has not added document requirements for this case yet."
+          title="No hay lista publicada"
+          description="Tu equipo legal todavia no ha agregado requisitos documentales para este caso."
         />
       ) : (
         <div className="page-stack">
@@ -43,9 +43,9 @@ export function ClientPortalChecklistPanel({
             </div>
             <div className="case-hero__badges">
               <Badge tone="neutral">{checklist.progress.total_items} total</Badge>
-              <Badge tone="info">{checklist.progress.requested_items} requested</Badge>
-              <Badge tone="warning">{checklist.progress.received_items} received</Badge>
-              <Badge tone="success">{checklist.progress.validated_items} validated</Badge>
+              <Badge tone="info">{checklist.progress.requested_items} solicitados</Badge>
+              <Badge tone="warning">{checklist.progress.received_items} recibidos</Badge>
+              <Badge tone="success">{checklist.progress.validated_items} validados</Badge>
             </div>
           </div>
 
@@ -55,20 +55,20 @@ export function ClientPortalChecklistPanel({
                 <div className="entity-card__header entity-card__header--spread">
                   <div>
                     <strong>{item.label}</strong>
-                    <p>{item.document_type ?? "General supporting document"}</p>
+                    <p>{item.document_type ?? "Documento general de soporte"}</p>
                   </div>
                   <div className="case-hero__badges">
                     <Badge tone={item.applies ? "info" : "neutral"}>
-                      {item.applies ? "Applies" : "Not applicable"}
+                      {item.applies ? "Aplica" : "No aplica"}
                     </Badge>
                     <Badge tone={item.requested ? "info" : "neutral"}>
-                      {item.requested ? "Requested" : "Not requested"}
+                      {item.requested ? "Solicitado" : "No solicitado"}
                     </Badge>
                     <Badge tone={item.received ? "warning" : "neutral"}>
-                      {item.received ? "Received" : "Pending"}
+                      {item.received ? "Recibido" : "Pendiente"}
                     </Badge>
                     <Badge tone={item.validated ? "success" : "neutral"}>
-                      {item.validated ? "Validated" : "Awaiting review"}
+                      {item.validated ? "Validado" : "Pendiente de revision"}
                     </Badge>
                   </div>
                 </div>
@@ -85,7 +85,7 @@ export function ClientPortalChecklistPanel({
 
                 {item.observations ? (
                   <div className="placeholder-note">
-                    <strong>Notes</strong>
+                    <strong>Notas</strong>
                     <p>{item.observations}</p>
                   </div>
                 ) : null}

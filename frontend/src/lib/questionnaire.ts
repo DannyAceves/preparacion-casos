@@ -9,6 +9,8 @@ export type QuestionnaireDraftValue = {
   answer_json?: Record<string, unknown> | unknown[] | null;
 };
 
+export type RepeatableGroupValue = Record<string, string>[];
+
 function getComparableAnswerValue(answer: QuestionnaireAnswer | null): unknown {
   if (!answer) {
     return null;
@@ -125,6 +127,31 @@ export function getInitialQuestionValue(question: QuestionnaireQuestion): string
   return answer.answer_json ? JSON.stringify(answer.answer_json, null, 2) : "";
 }
 
+export function getInitialRepeatableGroupValue(question: QuestionnaireQuestion): RepeatableGroupValue {
+  if (!Array.isArray(question.answer?.answer_json)) {
+    return [];
+  }
+
+  return question.answer.answer_json.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(item).map(([key, value]) => [key, value == null ? "" : String(value)]),
+    );
+  });
+}
+
+export function getRepeatableGroupFieldNames(question: QuestionnaireQuestion): string[] {
+  const fields = question.field_config?.fields;
+  return Array.isArray(fields) ? fields.filter((field): field is string => typeof field === "string") : [];
+}
+
+export function getRepeatableGroupItemLabel(question: QuestionnaireQuestion): string {
+  const itemLabel = question.field_config?.item_label;
+  return typeof itemLabel === "string" && itemLabel.trim() ? itemLabel.trim() : "Registro";
+}
+
 export function parseQuestionDraftValue(
   question: QuestionnaireQuestion,
   draftValue: string,
@@ -154,6 +181,12 @@ export function parseQuestionDraftValue(
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean),
+    };
+  }
+
+  if (question.input_type === "repeatable_group") {
+    return {
+      answer_json: draftValue ? (JSON.parse(draftValue) as Record<string, unknown> | unknown[]) : [],
     };
   }
 

@@ -22,7 +22,7 @@ export function QuestionnaireSection({
   const visibleQuestions = section.questions.filter((question) => isQuestionVisible(question, questionsByKey));
 
   return (
-    <Card title={section.title} subtitle={section.description ?? "Questionnaire section"}>
+    <Card title={section.title} subtitle={section.description ?? "Seccion del cuestionario"}>
       <div className="page-stack">
         {visibleQuestions.map((question) => (
           <QuestionnaireQuestionField

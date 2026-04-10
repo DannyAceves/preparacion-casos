@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import text
 
 from fastapi import FastAPI
@@ -10,7 +12,9 @@ from app.core.logging import configure_logging
 from app.core.middleware import register_middleware
 from app.db.session import AsyncSessionLocal
 from app.queue.redis_client import get_redis_client
+from scripts.seed import seed as run_seed
 
+logger = logging.getLogger(__name__)
 
 def create_application() -> FastAPI:
     configure_logging(settings.app_debug, settings.log_level)
@@ -25,6 +29,15 @@ def create_application() -> FastAPI:
     register_middleware(app)
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+
+    @app.on_event("startup")
+    async def ensure_demo_seed() -> None:
+        if settings.app_env != "development":
+            return
+        try:
+            await run_seed()
+        except Exception:  # noqa: BLE001
+            logger.exception("Demo seed failed during startup")
 
     @app.get("/health", tags=["health"])
     async def healthcheck() -> dict[str, str]:

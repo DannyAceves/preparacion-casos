@@ -157,7 +157,7 @@ export function FormsPanel({ caseId, forms, loading, error, onRefresh }: FormsPa
       <div className="entity-card">
         <div className="entity-card__header">
           <strong>Generate Forms</strong>
-          <p>Create assisted form drafts from canonical fields, questionnaire answers and extracted document data.</p>
+          <p>Create assisted form drafts from questionnaire answers, extracted document data, and attorney-reviewed case fields.</p>
         </div>
 
         <div className="entity-card__grid">
@@ -198,7 +198,7 @@ export function FormsPanel({ caseId, forms, loading, error, onRefresh }: FormsPa
       {!forms.length ? (
         <EmptyState
           title="No generated forms"
-          description="Generate forms to open the assisted field-by-field workspace and review export references here."
+          description="Generate forms to open the assisted field-by-field workspace and review the I-751 style draft here."
         />
       ) : (
         forms.map((form) => (

@@ -3,17 +3,24 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_DEBUG: ${APP_DEBUG:-true}
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - .:/app
       - ./storage:/app/storage
     command: >
       sh -c "alembic upgrade head &&
+      python scripts/seed.py &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   worker:
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_DEBUG: ${APP_DEBUG:-true}
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - .:/app
       - ./storage:/app/storage
@@ -35,16 +42,33 @@ services:
       npm run dev -- --hostname 0.0.0.0"
 
   migrate:
+    environment:
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - .:/app
       - ./storage:/app/storage
 
   seed:
+    environment:
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - .:/app
       - ./storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   test-e2e:
+    environment:
+      DB_SCHEMA: ${DB_SCHEMA:-caseproces}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-caseproces}
     volumes:
       - .:/app
       - ./storage:/app/storage

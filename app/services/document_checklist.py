@@ -21,6 +21,7 @@ from app.schemas.document_checklist import (
     CaseDocumentChecklistRead,
     CaseDocumentChecklistReorderRequest,
 )
+from app.services.roc_i751_defaults import ensure_roc_i751_defaults
 
 
 class DocumentChecklistService:
@@ -129,7 +130,10 @@ class DocumentChecklistService:
     async def _generate_from_template(self, case: Case, append_missing_only: bool = False) -> None:
         template = await self.template_repository.get_by_case_type(case.case_type)
         if template is None:
-            return
+            await ensure_roc_i751_defaults(self.session, case.case_type)
+            template = await self.template_repository.get_by_case_type(case.case_type)
+            if template is None:
+                return
 
         existing_items = await self.item_repository.list_for_case(case.id)
         existing_keys = {

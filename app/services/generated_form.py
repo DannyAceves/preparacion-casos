@@ -36,6 +36,7 @@ from app.schemas.generated_form import (
     GeneratedFormSuggestionRead,
     GeneratedFormTemplateRead,
 )
+from app.services.roc_i751_defaults import ensure_roc_i751_defaults
 
 APPROVABLE_STATUSES = {"draft", "review_pending", "fix_required"}
 
@@ -57,6 +58,9 @@ class GeneratedFormService:
     ) -> list[GeneratedForm]:
         case = await self._get_case(case_id)
         forms = await self.form_repository.list_active_for_case_type(case.case_type)
+        if not forms:
+            await ensure_roc_i751_defaults(self.session, case.case_type)
+            forms = await self.form_repository.list_active_for_case_type(case.case_type)
         if not forms:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

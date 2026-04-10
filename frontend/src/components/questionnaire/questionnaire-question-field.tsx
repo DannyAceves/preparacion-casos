@@ -4,9 +4,13 @@ import { ChangeEvent, useEffect, useState } from "react";
 
 import {
   getInitialQuestionValue,
+  getInitialRepeatableGroupValue,
+  getRepeatableGroupFieldNames,
+  getRepeatableGroupItemLabel,
   parseQuestionDraftValue,
   QuestionnaireDraftValue,
 } from "@/lib/questionnaire";
+import { RepeatableGroupField } from "@/components/questionnaire/repeatable-group-field";
 import { QuestionnaireQuestion } from "@/types/workspace";
 
 interface QuestionnaireQuestionFieldProps {
@@ -21,12 +25,14 @@ export function QuestionnaireQuestionField({
   onSave,
 }: QuestionnaireQuestionFieldProps): JSX.Element {
   const [draftValue, setDraftValue] = useState(getInitialQuestionValue(question));
+  const [groupDraftValue, setGroupDraftValue] = useState(getInitialRepeatableGroupValue(question));
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftValue(getInitialQuestionValue(question));
+    setGroupDraftValue(getInitialRepeatableGroupValue(question));
     setFeedback(null);
     setError(null);
   }, [question]);
@@ -37,11 +43,14 @@ export function QuestionnaireQuestionField({
     setError(null);
 
     try {
-      const value = parseQuestionDraftValue(question, draftValue);
+      const value =
+        question.input_type === "repeatable_group"
+          ? { answer_json: groupDraftValue }
+          : parseQuestionDraftValue(question, draftValue);
       await onSave(question, value);
-      setFeedback(actorReference ? "Saved." : "Saved without actor reference.");
+      setFeedback(actorReference ? "Guardado." : "Guardado sin referencia de usuario.");
     } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : "Could not save answer.";
+      const message = saveError instanceof Error ? saveError.message : "No se pudo guardar la respuesta.";
       setError(message);
     } finally {
       setSaving(false);
@@ -67,8 +76,8 @@ export function QuestionnaireQuestionField({
     if (question.input_type === "boolean" || question.input_type === "checkbox") {
       return (
         <select value={draftValue} onChange={(event) => setDraftValue(event.target.value)}>
-          <option value="">Select an option</option>
-          <option value="true">Yes</option>
+          <option value="">Seleccione una opcion</option>
+          <option value="true">Si</option>
           <option value="false">No</option>
         </select>
       );
@@ -77,7 +86,7 @@ export function QuestionnaireQuestionField({
     if (question.input_type === "single_select" || question.input_type === "select") {
       return (
         <select value={draftValue} onChange={(event) => setDraftValue(event.target.value)}>
-          <option value="">Select an option</option>
+          <option value="">Seleccione una opcion</option>
           {(question.options ?? []).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -111,7 +120,18 @@ export function QuestionnaireQuestionField({
         <input
           value={draftValue}
           onChange={(event) => setDraftValue(event.target.value)}
-          placeholder="Comma-separated values"
+          placeholder="Valores separados por coma"
+        />
+      );
+    }
+
+    if (question.input_type === "repeatable_group") {
+      return (
+        <RepeatableGroupField
+          itemLabel={getRepeatableGroupItemLabel(question)}
+          fieldNames={getRepeatableGroupFieldNames(question)}
+          value={groupDraftValue}
+          onChange={setGroupDraftValue}
         />
       );
     }
@@ -122,11 +142,7 @@ export function QuestionnaireQuestionField({
         value={draftValue}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraftValue(event.target.value)}
         rows={6}
-        placeholder={
-          question.input_type === "repeatable_group"
-            ? '[{"field":"value"}]'
-            : '{"key":"value"}'
-        }
+        placeholder='{"clave":"valor"}'
       />
     );
   }
@@ -136,16 +152,14 @@ export function QuestionnaireQuestionField({
       <div className="questionnaire-field__header">
         <div>
           <strong>{question.prompt}</strong>
-          <p>
-            {question.key} | {question.input_type} {question.is_required ? "| required" : "| optional"}
-          </p>
+          <p>{question.is_required ? "Obligatoria" : "Opcional"}</p>
         </div>
       </div>
 
       {question.help_text ? <p className="questionnaire-field__help">{question.help_text}</p> : null}
 
       <label className="ui-field">
-        <span>Answer</span>
+        <span>Respuesta</span>
         {renderInput()}
       </label>
 
@@ -153,7 +167,7 @@ export function QuestionnaireQuestionField({
       {feedback ? <p className="document-feedback document-feedback--success">{feedback}</p> : null}
 
       <button type="button" className="ui-button" disabled={saving} onClick={() => void handleSave()}>
-        {saving ? "Saving..." : question.answer?.id ? "Update answer" : "Save answer"}
+        {saving ? "Guardando..." : question.answer?.id ? "Actualizar respuesta" : "Guardar respuesta"}
       </button>
     </div>
   );

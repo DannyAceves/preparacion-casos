@@ -69,23 +69,23 @@ export function CaseQuestionnairePanel({
     try {
       await instantiateCaseQuestionnaire(caseId);
       await onRefresh();
-      setActionMessage("Questionnaire instance generated for this case.");
+      setActionMessage("Se genero la instancia del cuestionario para este caso.");
     } catch (error) {
-      setSaveError(getApiErrorMessage(error, "Could not generate questionnaire for this case."));
+      setSaveError(getApiErrorMessage(error, "No se pudo generar el cuestionario para este caso."));
     } finally {
       setInstantiating(false);
     }
   }
 
   if (loading) {
-    return <LoadingState label="Loading questionnaire..." />;
+    return <LoadingState label="Cargando cuestionario..." />;
   }
 
   if (error) {
     return (
       <ErrorState
-        title="Could not load questionnaire"
-        description="The questionnaire data could not be retrieved from the backend."
+        title="No se pudo cargar el cuestionario"
+        description="No se pudo obtener la informacion del cuestionario desde el backend."
       />
     );
   }
@@ -93,8 +93,8 @@ export function CaseQuestionnairePanel({
   if (!questionnaire || !questionnaire.sections.length) {
     return (
       <EmptyState
-        title="No questionnaire available"
-        description="This case type does not have a questionnaire template assigned yet."
+        title="No hay cuestionario disponible"
+        description="Este tipo de caso todavia no tiene un template de cuestionario asignado."
       />
     );
   }
@@ -103,7 +103,7 @@ export function CaseQuestionnairePanel({
     <div className="detail-sections">
       <div className="questionnaire-toolbar">
         <label className="ui-field">
-          <span>Actor Reference</span>
+          <span>Usuario responsable</span>
           <input
             value={actorReference}
             onChange={(event) => setActorReference(event.target.value)}
@@ -111,14 +111,14 @@ export function CaseQuestionnairePanel({
           />
         </label>
         <div className="questionnaire-toolbar__meta">
-          <p>Responses are saved per question and refresh the workspace after each successful write.</p>
+          <p>Las respuestas se guardan por pregunta y el expediente se actualiza despues de cada guardado.</p>
           <div className="entity-form__actions">
             <button type="button" className="ui-button ui-button--ghost" disabled={instantiating} onClick={() => void handleInstantiate()}>
               {instantiating
-                ? "Generating..."
+                ? "Generando..."
                 : questionnaire.questionnaire_instance_id
-                  ? "Ensure questionnaire instance"
-                  : "Generate questionnaire for case"}
+                  ? "Verificar instancia del cuestionario"
+                  : "Generar cuestionario para el caso"}
             </button>
           </div>
         </div>

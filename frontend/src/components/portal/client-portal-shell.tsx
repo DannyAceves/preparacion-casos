@@ -28,7 +28,7 @@ const sessionStorageTokenKey = (token: string): string => `client-portal-session
 
 function formatDateTime(value: string | null): string {
   if (!value) {
-    return "Not available";
+    return "No disponible";
   }
 
   return new Date(value).toLocaleString();
@@ -86,7 +86,7 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
       if (!storedPasscode) {
         setContext(null);
         setPortalSessionToken("");
-        setError(getApiErrorMessage(loadError, "Your secure portal session expired. Enter the passcode again."));
+        setError(getApiErrorMessage(loadError, "Tu sesion segura expiro. Ingresa el codigo nuevamente."));
         return;
       }
       await loadPortalContext(storedPasscode, options);
@@ -113,7 +113,7 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
   async function handleUnlock(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!passcode.trim()) {
-      setError("Enter the access passcode to continue.");
+      setError("Ingresa el codigo de acceso para continuar.");
       return;
     }
 
@@ -124,7 +124,7 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
       setPortalSessionToken(session.session_token);
       sessionStorage.setItem(sessionStorageTokenKey(token), session.session_token);
     } catch (authError) {
-      setError(getApiErrorMessage(authError, "Could not unlock the client portal."));
+      setError(getApiErrorMessage(authError, "No se pudo desbloquear el portal del cliente."));
       setSubmitting(false);
       return;
     }
@@ -147,31 +147,31 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
     <main className="client-portal">
       <section className="client-portal__hero">
         <div>
-          <span className="app-sidebar__eyebrow">Client Portal</span>
-          <h1>Case questionnaire and document upload</h1>
-          <p>Use the secure passcode provided by your legal team to continue your intake and upload documents.</p>
+          <span className="app-sidebar__eyebrow">Portal del Cliente</span>
+          <h1>Cuestionario del caso y carga de documentos</h1>
+          <p>Usa el codigo seguro que te compartio tu equipo legal para continuar tu proceso y subir documentos.</p>
         </div>
       </section>
 
-      {loading ? <LoadingState label="Opening client portal..." /> : null}
+      {loading ? <LoadingState label="Abriendo portal del cliente..." /> : null}
 
       {!loading && !context ? (
         <section className="client-portal__content">
-          <Card title="Secure Access" subtitle="This portal is unique to your case and requires a valid passcode.">
+          <Card title="Acceso Seguro" subtitle="Este portal es unico para tu caso y requiere un codigo valido.">
             <form className="entity-form" onSubmit={(event) => void handleUnlock(event)}>
-              <FormField label="Passcode" htmlFor="client-portal-passcode-access">
+              <FormField label="Codigo de acceso" htmlFor="client-portal-passcode-access">
                 <input
                   id="client-portal-passcode-access"
                   type="password"
                   value={passcode}
                   onChange={(event) => setPasscode(event.target.value)}
-                  placeholder="Enter your access code"
+                  placeholder="Ingresa tu codigo de acceso"
                 />
               </FormField>
               {error ? <FormFeedback tone="error" message={error} /> : null}
               <div className="entity-form__actions">
                 <button type="submit" className="ui-button" disabled={submitting}>
-                  {submitting ? "Opening..." : "Open portal"}
+                  {submitting ? "Abriendo..." : "Abrir portal"}
                 </button>
               </div>
             </form>
@@ -185,17 +185,17 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
             <Card title={context.case_title} subtitle={`${context.case_number} · ${context.case_type}`}>
               <div className="page-stack">
                 <div className="case-hero__badges">
-                  <Badge tone="info">{context.progress.overall_percent_complete}% complete</Badge>
+                  <Badge tone="info">{context.progress.overall_percent_complete}% completado</Badge>
                   <Badge tone="neutral">
-                    Questionnaire {context.progress.questionnaire_answered_questions}/{context.progress.questionnaire_total_questions}
+                    Cuestionario {context.progress.questionnaire_answered_questions}/{context.progress.questionnaire_total_questions}
                   </Badge>
                   <Badge tone="warning">
-                    Documents {context.progress.checklist_received_items}/{context.progress.checklist_applicable_items}
+                    Documentos {context.progress.checklist_received_items}/{context.progress.checklist_applicable_items}
                   </Badge>
-                  <Badge tone="neutral">Session until {formatDateTime(context.session_expires_at)}</Badge>
+                  <Badge tone="neutral">Sesion hasta {formatDateTime(context.session_expires_at)}</Badge>
                 </div>
                 <p className="client-portal__summary">
-                  {context.case_summary ?? "Your legal team has prepared this portal so you can complete your intake and submit files securely."}
+                  {context.case_summary ?? "Tu equipo legal preparo este portal para que completes tu informacion y subas archivos de forma segura."}
                 </p>
                 <div className="client-portal__progress">
                   <div className="checklist-progress__bar">
@@ -204,22 +204,22 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
                       style={{ width: `${context.progress.overall_percent_complete}%` }}
                     />
                   </div>
-                  <p>Access expires: {formatDateTime(context.access_expires_at)}</p>
+                  <p>El acceso vence: {formatDateTime(context.access_expires_at)}</p>
                 </div>
               </div>
             </Card>
 
             {context.instructions ? (
-              <Card title="Instructions" subtitle="Please review these notes before continuing.">
+              <Card title="Instrucciones" subtitle="Revisa estas notas antes de continuar.">
                 <div className="placeholder-note">
-                  <strong>Next steps</strong>
+                  <strong>Siguientes pasos</strong>
                   <p>{context.instructions}</p>
                 </div>
               </Card>
             ) : null}
 
             {message ? <FormFeedback tone="success" message={message} /> : null}
-            {error ? <ErrorState title="Portal refresh failed" description={error} /> : null}
+            {error ? <ErrorState title="No se pudo actualizar el portal" description={error} /> : null}
 
             <div className="client-portal__grid">
               <ClientPortalChecklistPanel checklist={context.checklist} />

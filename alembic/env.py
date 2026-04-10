@@ -3,7 +3,7 @@ from __future__ import annotations
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 from app.core.config import settings
 from app.db.base import Base
@@ -26,6 +26,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        version_table_schema=settings.db_schema,
     )
 
     with context.begin_transaction():
@@ -40,7 +41,19 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        # Commit the schema/search_path preamble before Alembic starts its own
+        # transaction; otherwise SQLAlchemy 2 may roll the whole migration batch
+        # back when the connection closes.
+        with connection.begin():
+            connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{settings.db_schema}"'))
+            connection.execute(text(f'SET search_path TO "{settings.db_schema}", public'))
+        connection.dialect.default_schema_name = settings.db_schema
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            version_table_schema=settings.db_schema,
+        )
 
         with context.begin_transaction():
             context.run_migrations()

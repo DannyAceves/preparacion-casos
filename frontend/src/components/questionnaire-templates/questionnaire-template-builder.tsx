@@ -350,7 +350,7 @@ export function QuestionnaireTemplateBuilder(): JSX.Element {
             <input
               value={filterCaseType}
               onChange={(event) => setFilterCaseType(event.target.value)}
-              placeholder="family-based, i-751, humanitarian"
+              placeholder="roc-i751, family-based, humanitarian"
             />
           </label>
         </div>
@@ -413,7 +413,7 @@ export function QuestionnaireTemplateBuilder(): JSX.Element {
                   id="template-case-type"
                   value={formState.caseType}
                   onChange={(event) => setFormState((current) => ({ ...current, caseType: event.target.value }))}
-                  placeholder="i-751"
+                  placeholder="roc-i751"
                 />
               </FormField>
               <FormField label="Title" htmlFor="template-title">

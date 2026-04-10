@@ -10,14 +10,16 @@ from typing import Any
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, configure_db_session
 from app.models.audit_log import AuditLog
 from app.models.case import Case
 from app.models.case_canonical_field import CaseCanonicalField
+from app.models.client_portal import ClientPortalAccess
 from app.models.case_packet import CasePacket
 from app.models.case_submission import CaseSubmission
 from app.models.client import Client
 from app.models.document import Document
+from app.models.document_checklist import CaseDocumentChecklistItem, DocumentChecklistTemplate, DocumentChecklistTemplateItem
 from app.models.document_classification import DocumentClassification
 from app.models.form import Form
 from app.models.form_field_mapping import FormFieldMapping
@@ -31,6 +33,7 @@ from app.models.questionnaire_response import QuestionnaireResponse
 from app.models.questionnaire_section import QuestionnaireSection
 from app.models.questionnaire_template import QuestionnaireTemplate
 from app.models.review import Review
+from app.services.roc_i751_defaults import ensure_roc_i751_defaults
 
 SEED_CASE_NUMBERS = {
     "CASE-QA-0001",
@@ -39,6 +42,7 @@ SEED_CASE_NUMBERS = {
     "CASE-QA-0004",
     "CASE-QA-0005",
     "CASE-QA-0006",
+    "CASE-QA-0007",
 }
 SEED_CLIENT_EMAILS = {
     "ana.martinez.qa@example.com",
@@ -47,6 +51,7 @@ SEED_CLIENT_EMAILS = {
     "carlos.lopez.qa@example.com",
     "mariana.torres.qa@example.com",
     "jorge.castillo.qa@example.com",
+    "luz.sabogal.qa@example.com",
 }
 INTERNAL_USERS = [
     {"role": "admin", "name": "Valeria Admin", "email": "admin.qa@example.com", "reference": "staff-admin-001"},
@@ -54,8 +59,18 @@ INTERNAL_USERS = [
     {"role": "paralegal", "name": "Mateo Paralegal", "email": "paralegal.qa@example.com", "reference": "staff-paralegal-001"},
     {"role": "qa", "name": "Renata QA", "email": "qa.reviewer@example.com", "reference": "staff-qa-001"},
 ]
-CASE_TYPE_CATALOG = ["family-based", "employment-based", "humanitarian"]
+CASE_TYPE_CATALOG = ["family-based", "employment-based", "humanitarian", "roc-i751"]
 BASE_TIME = datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
+SEED_PORTAL_CREDENTIALS = {
+    "case_7": {
+        "token": "roc-demo-luz-i751-portal",
+        "passcode": "ROC751",
+        "instructions": (
+            "Bienvenida al portal de ROC / I-751. Completa el cuestionario en espanol, "
+            "sube los documentos solicitados y avisa a tu equipo legal si algun dato cambia."
+        ),
+    }
+}
 
 
 def seeded_at(days_ago: int, minutes: int = 0) -> datetime:
@@ -94,12 +109,13 @@ def build_packet_export(case_number: str, packet_version: int) -> dict[str, Any]
         "generated_at": BASE_TIME.isoformat(),
         "packet_version": packet_version,
         "bundle_path": f"/app/storage/packets/{case_number}/packet-v{packet_version}.json",
-        "prefilled_forms_placeholder": {"ready": True, "available_templates": ["I-130", "I-140", "I-589"]},
+        "prefilled_forms_placeholder": {"ready": True, "available_templates": ["I-130", "I-140", "I-589", "I-751"]},
     }
 
 
 async def seed() -> None:
     async with AsyncSessionLocal() as session:
+        await configure_db_session(session)
         existing_case = await session.scalar(select(Case).where(Case.case_number.in_(SEED_CASE_NUMBERS)))
         existing_client = await session.scalar(select(Client).where(Client.email.in_(SEED_CLIENT_EMAILS)))
         if existing_case is not None or existing_client is not None:
@@ -119,6 +135,8 @@ async def seed() -> None:
         await seed_case_questionnaires(session, cases, questionnaires)
         documents = await seed_documents(session, cases, storage_root)
         await seed_canonical_fields(session, cases, documents)
+        await seed_case_checklists(session, cases)
+        await seed_client_portal_accesses(session, cases)
         await seed_inconsistencies(session, cases)
         await seed_reviews(session, cases)
         await seed_packets(session, cases, documents)
@@ -181,6 +199,14 @@ async def seed_clients(session: Any) -> dict[str, Client]:
             date_of_birth=date(1991, 9, 19),
             notes="QA seed client with failed humanitarian submission.",
         ),
+        "luz": Client(
+            first_name="Luz Angela Maria",
+            last_name="Sabogal Fuentes",
+            email="luz.sabogal.qa@example.com",
+            phone="+52-555-100-0007",
+            date_of_birth=date(1986, 4, 2),
+            notes="QA ROC / I-751 client seeded for the real interview, portal, and assisted form workflow.",
+        ),
     }
     session.add_all(list(clients.values()))
     await session.flush()
@@ -237,6 +263,14 @@ async def seed_cases(session: Any, clients: dict[str, Client]) -> dict[str, Case
             title="Humanitarian filing with failed submission",
             summary="Case ready on paper but with a failed submission attempt for QA regression flows.",
         ),
+        "case_7": Case(
+            client_id=clients["luz"].id,
+            case_number="CASE-QA-0007",
+            case_type="roc-i751",
+            status="attorney_review",
+            title="ROC I-751 joint filing demo",
+            summary="Demo coherente del flujo ROC: entrevista, checklist, portal del cliente, documentos y borrador I-751.",
+        ),
     }
     session.add_all(list(cases.values()))
     await session.flush()
@@ -252,6 +286,8 @@ async def seed_participants(session: Any, cases: dict[str, Case]) -> None:
         Participant(case_id=cases["case_4"].id, role="beneficiary", first_name="Carlos", last_name="Lopez", email="carlos.lopez.qa@example.com"),
         Participant(case_id=cases["case_5"].id, role="petitioner", first_name="Mariana", last_name="Torres", email="mariana.torres.qa@example.com"),
         Participant(case_id=cases["case_6"].id, role="applicant", first_name="Jorge", last_name="Castillo", email="jorge.castillo.qa@example.com"),
+        Participant(case_id=cases["case_7"].id, role="conditional_resident", first_name="Luz Angela Maria", last_name="Sabogal Fuentes", email="luz.sabogal.qa@example.com"),
+        Participant(case_id=cases["case_7"].id, role="spouse", first_name="Daniel", last_name="Fuentes", email="daniel.fuentes.qa@example.com"),
     ]
     session.add_all(participants)
     await session.flush()
@@ -337,10 +373,69 @@ async def seed_case_questionnaires(session: Any, cases: dict[str, Case], questio
         "case_4": [{"question_key": "employment-beneficiary-full-name", "text": "Carlos Lopez"}, {"question_key": "employment-beneficiary-dob", "date": date(1985, 11, 4)}, {"question_key": "employment-petition-type", "choice": "eb2_niw"}, {"question_key": "employment-offer-active", "boolean": True}, {"question_key": "employment-countries", "choices": ["mx", "us", "de"]}, {"question_key": "employment-metadata", "json": {"premium_processing": True, "remote_role": False}}],
         "case_5": [{"question_key": "family-beneficiary-full-name", "text": "Mariana Torres"}, {"question_key": "family-beneficiary-dob", "date": date(1994, 7, 30)}, {"question_key": "family-prior-filing", "boolean": False}, {"question_key": "family-visa-category", "choice": "ir1"}, {"question_key": "family-countries", "choices": ["mx", "us"]}, {"question_key": "family-metadata", "json": {"interpreter_needed": False, "expedite_reason": ""}}],
         "case_6": [{"question_key": "humanitarian-applicant-full-name", "text": "Jorge Castillo"}, {"question_key": "humanitarian-applicant-dob", "date": date(1991, 9, 19)}, {"question_key": "humanitarian-prior-entry", "boolean": True}, {"question_key": "humanitarian-program", "choice": "asylum"}, {"question_key": "humanitarian-countries", "choices": ["hn", "gt"]}, {"question_key": "humanitarian-metadata", "json": {"detained": False, "interpreter_needed": True}}],
+        "case_7": [
+            {"question_key": "last_name", "text": "Sabogal Fuentes"},
+            {"question_key": "first_name", "text": "Luz Angela Maria"},
+            {"question_key": "middle_name", "text": ""},
+            {"question_key": "other_names_used", "text": "Luz Sabogal"},
+            {"question_key": "date_of_birth", "date": date(1986, 4, 2)},
+            {"question_key": "country_of_birth", "text": "Colombia"},
+            {"question_key": "country_of_citizenship", "text": "Colombia"},
+            {"question_key": "alien_registration_number", "text": "A123456789"},
+            {"question_key": "ssn", "text": "555-55-1207"},
+            {"question_key": "uscis_elis_account_number", "text": "ELIS123456"},
+            {"question_key": "marital_status", "choice": "married"},
+            {"question_key": "marriage_date", "date": date(2021, 6, 18)},
+            {"question_key": "marriage_place", "text": "San Antonio, Texas"},
+            {"question_key": "conditional_residence_expires_on", "date": date(2026, 6, 14)},
+            {"question_key": "mailing_address", "text": "742 Evergreen Terrace Apt 3B, San Antonio, TX 78207"},
+            {"question_key": "physical_address_same_as_mailing", "choice": "yes"},
+            {"question_key": "in_removal_proceedings", "choice": "no"},
+            {"question_key": "third_party_fee_paid", "choice": "no"},
+            {"question_key": "arrest_history", "choice": "no"},
+            {"question_key": "different_marriage_basis", "choice": "no"},
+            {"question_key": "prior_addresses_since_residence", "json": [{"from": "2024-06-15", "to": "Present", "street": "742 Evergreen Terrace", "unit": "Apt 3B", "city": "San Antonio", "county": "Bexar", "state": "TX", "zip": "78207"}]},
+            {"question_key": "government_overseas_service", "choice": "no"},
+            {"question_key": "ethnicity", "choice": "hispanic_or_latino"},
+            {"question_key": "race", "text": "White"},
+            {"question_key": "height_feet", "text": "5"},
+            {"question_key": "height_inches", "text": "4"},
+            {"question_key": "weight_lbs", "text": "132"},
+            {"question_key": "eye_color", "choice": "brown"},
+            {"question_key": "hair_color", "choice": "black"},
+            {"question_key": "joint_filing_party", "choice": "spouse"},
+            {"question_key": "spouse_relationship", "choice": "spouse"},
+            {"question_key": "spouse_last_name", "text": "Fuentes"},
+            {"question_key": "spouse_first_name", "text": "Daniel"},
+            {"question_key": "spouse_middle_name", "text": "Alejandro"},
+            {"question_key": "spouse_date_of_birth", "date": date(1984, 11, 12)},
+            {"question_key": "spouse_ssn", "text": "555-55-8910"},
+            {"question_key": "spouse_physical_address", "text": "742 Evergreen Terrace Apt 3B, San Antonio, TX 78207"},
+            {"question_key": "children", "json": [{"full_name": "Sofia Fuentes Sabogal", "date_of_birth": "2023-02-17", "a_number": "", "living_with_you": "yes", "applying_with_you": "no", "address": "742 Evergreen Terrace Apt 3B, San Antonio, TX 78207"}]},
+            {"question_key": "accommodation_requested_self", "choice": "no"},
+            {"question_key": "accommodation_requested_spouse", "choice": "no"},
+            {"question_key": "accommodation_requested_children", "choice": "no"},
+            {"question_key": "petitioner_can_read_english", "choice": "yes"},
+            {"question_key": "beneficiary_can_read_english", "choice": "yes"},
+            {"question_key": "additional_information", "text": "Joint filing with strong commingled evidence, one shared child, and continuous cohabitation."},
+        ],
     }
 
-    question_map: dict[str, QuestionnaireQuestion] = questionnaires["questions"]
-    template_titles = {"family-based": "Family-Based Intake Questionnaire", "employment-based": "Employment-Based Intake Questionnaire", "humanitarian": "Humanitarian Intake Questionnaire"}
+    question_map: dict[str, QuestionnaireQuestion] = dict(questionnaires["questions"])
+    roc_template = await session.scalar(
+        select(QuestionnaireTemplate)
+        .where(QuestionnaireTemplate.case_type == "roc-i751", QuestionnaireTemplate.status == "active")
+        .order_by(QuestionnaireTemplate.version.desc())
+    )
+    if roc_template is not None:
+        roc_questions = await session.scalars(
+            select(QuestionnaireQuestion)
+            .join(QuestionnaireSection, QuestionnaireQuestion.section_id == QuestionnaireSection.id)
+            .where(QuestionnaireSection.template_id == roc_template.id)
+        )
+        for question in roc_questions:
+            question_map[question.key] = question
+    template_titles = {"family-based": "Family-Based Intake Questionnaire", "employment-based": "Employment-Based Intake Questionnaire", "humanitarian": "Humanitarian Intake Questionnaire", "roc-i751": "Cuestionario ROC / I-751"}
 
     for case_key, case in cases.items():
         questionnaire = Questionnaire(case_id=case.id, title=template_titles[case.case_type], status="submitted" if case_key != "case_1" else "draft", version=1, submitted_at=seeded_at(15 if case_key == "case_1" else 10))
@@ -387,7 +482,11 @@ async def seed_forms(session: Any) -> dict[str, Form]:
     ]
     session.add_all(mappings)
     await session.flush()
-    return {"family-based": family_form, "employment-based": employment_form, "humanitarian": humanitarian_form}
+    await ensure_roc_i751_defaults(session, "roc-i751")
+    roc_form = await session.scalar(
+        select(Form).where(Form.case_type_id == "roc-i751", Form.form_code == "I-751", Form.is_active.is_(True))
+    )
+    return {"family-based": family_form, "employment-based": employment_form, "humanitarian": humanitarian_form, "roc-i751": roc_form}
 
 
 async def seed_documents(session: Any, cases: dict[str, Case], storage_root: Path) -> dict[str, dict[str, Document]]:
@@ -491,6 +590,13 @@ async def seed_documents(session: Any, cases: dict[str, Case], storage_root: Pat
     await add_document(case_key="case_6", uploaded_by="staff-paralegal-001", document_type="passport", original_filename="jorge_passport.pdf", stored_filename="jorge-passport-v1.pdf", mime_type="application/pdf", contents="Passport for Jorge Castillo. DOB 1991-09-19.", document_status="processed", processing_status="processed", classification_label="passport", classification_source="automatic", classification_confidence_score=0.98, version_number=1, uploaded_at=seeded_at(20), extracted_text="Passport for Jorge Castillo. DOB 1991-09-19.", extracted_fields={"date_of_birth": "1991-09-19"}, extracted_metadata={"pages": 1})
     await add_document(case_key="case_6", uploaded_by="staff-paralegal-001", document_type="evidence", original_filename="jorge_humanitarian_evidence.pdf", stored_filename="jorge-evidence-v1.pdf", mime_type="application/pdf", contents="Humanitarian evidence packet with declarations.", document_status="processed", processing_status="processed", classification_label="evidence", classification_source="automatic", classification_confidence_score=0.87, version_number=1, uploaded_at=seeded_at(19), extracted_text="Protection claim evidence including declaration and country conditions.", extracted_fields={"declarations": 3}, extracted_metadata={"pages": 12})
 
+    await add_document(case_key="case_7", uploaded_by="staff-paralegal-001", document_type="conditional_resident_card", original_filename="luz_green_card.pdf", stored_filename="luz-green-card-v1.pdf", mime_type="application/pdf", contents="Permanent resident card for Luz Angela Maria Sabogal Fuentes. A-Number A123456789. Expires 2026-06-14.", document_status="processed", processing_status="processed", classification_label="conditional_resident_card", classification_source="automatic", classification_confidence_score=0.99, version_number=1, uploaded_at=seeded_at(9), extracted_text="Permanent resident card. Luz Angela Maria Sabogal Fuentes. A123456789. Expires 2026-06-14.", extracted_fields={"alien_registration_number": "A123456789", "conditional_residence_expires_on": "2026-06-14", "date_of_birth": "1986-04-02"}, extracted_metadata={"pages": 2})
+    await add_document(case_key="case_7", uploaded_by="staff-paralegal-001", document_type="marriage_certificate", original_filename="luz_marriage_certificate.pdf", stored_filename="luz-marriage-certificate-v1.pdf", mime_type="application/pdf", contents="Marriage certificate for Luz Angela Maria Sabogal Fuentes and Daniel Alejandro Fuentes. Married on 2021-06-18 in San Antonio, Texas.", document_status="processed", processing_status="processed", classification_label="marriage_certificate", classification_source="automatic", classification_confidence_score=0.98, version_number=1, uploaded_at=seeded_at(8), extracted_text="Marriage certificate. Luz Angela Maria Sabogal Fuentes and Daniel Alejandro Fuentes. 2021-06-18. San Antonio, Texas.", extracted_fields={"marriage_date": "2021-06-18", "marriage_place": "San Antonio, Texas", "spouse_first_name": "Daniel", "spouse_last_name": "Fuentes"}, extracted_metadata={"pages": 1})
+    await add_document(case_key="case_7", uploaded_by="staff-paralegal-001", document_type="joint_tax_returns", original_filename="luz_joint_tax_returns_2024.pdf", stored_filename="luz-joint-tax-returns-v1.pdf", mime_type="application/pdf", contents="Joint tax return for Luz and Daniel Fuentes for tax year 2024.", document_status="processed", processing_status="processed", classification_label="joint_tax_returns", classification_source="automatic", classification_confidence_score=0.93, version_number=1, uploaded_at=seeded_at(7), extracted_text="Joint tax return filed married filing jointly for 2024.", extracted_fields={"filing_status": "married_filing_jointly", "tax_year": "2024"}, extracted_metadata={"pages": 24})
+    await add_document(case_key="case_7", uploaded_by="client-portal:roc-demo", document_type="joint_bank_statements", original_filename="luz_joint_bank_statements.pdf", stored_filename="luz-joint-bank-statements-v1.pdf", mime_type="application/pdf", contents="Joint bank statements for Luz and Daniel covering six months.", document_status="received_from_client", processing_status="processed", classification_label="joint_bank_statements", classification_source="client_portal", classification_confidence_score=0.95, version_number=1, uploaded_at=seeded_at(5), extracted_text="Joint account statements for six consecutive months.", extracted_fields={"statement_months": 6}, extracted_metadata={"pages": 12})
+    await add_document(case_key="case_7", uploaded_by="client-portal:roc-demo", document_type="children_birth_certificates", original_filename="sofia_birth_certificate.pdf", stored_filename="sofia-birth-certificate-v1.pdf", mime_type="application/pdf", contents="Birth certificate for Sofia Fuentes Sabogal. Born 2023-02-17 to Luz Angela Maria Sabogal Fuentes and Daniel Alejandro Fuentes.", document_status="received_from_client", processing_status="processed", classification_label="children_birth_certificates", classification_source="client_portal", classification_confidence_score=0.96, version_number=1, uploaded_at=seeded_at(4), extracted_text="Birth certificate for Sofia Fuentes Sabogal. DOB 2023-02-17.", extracted_fields={"child_name": "Sofia Fuentes Sabogal", "child_date_of_birth": "2023-02-17"}, extracted_metadata={"pages": 1})
+    await add_document(case_key="case_7", uploaded_by="client-portal:roc-demo", document_type="relationship_photos", original_filename="luz_relationship_photos.pdf", stored_filename="luz-relationship-photos-v1.pdf", mime_type="application/pdf", contents="Ten captioned family photos for Luz and Daniel.", document_status="received_from_client", processing_status="processed", classification_label="relationship_photos", classification_source="client_portal", classification_confidence_score=0.92, version_number=1, uploaded_at=seeded_at(3), extracted_text="Captioned family photo packet with ten images.", extracted_fields={"photo_count": 10}, extracted_metadata={"pages": 10})
+
     await session.flush()
     return docs
 
@@ -524,6 +630,42 @@ async def seed_canonical_fields(session: Any, cases: dict[str, Case], documents:
                 CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="petition.category", field_value="asylum", confidence_score=0.9300, source_priority=90, status="confirmed"),
                 CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="humanitarian.summary", field_value="Fear-based claim supported by declarations and country conditions.", confidence_score=0.8100, source_priority=70, status="suggested"),
             ])
+        if case.case_type == "roc-i751":
+            fields.extend([
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="last_name", field_value="Sabogal Fuentes", confidence_score=0.9900, source_priority=100, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="first_name", field_value="Luz Angela Maria", confidence_score=0.9900, source_priority=99, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="middle_name", field_value="", confidence_score=0.7000, source_priority=40, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="other_names_used", field_value="Luz Sabogal", confidence_score=0.8200, source_priority=60, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="date_of_birth", field_value="1986-04-02", confidence_score=0.9800, source_priority=98, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="country_of_birth", field_value="Colombia", confidence_score=0.9300, source_priority=90, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="country_of_citizenship", field_value="Colombia", confidence_score=0.9300, source_priority=90, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="alien_registration_number", field_value="A123456789", confidence_score=0.9900, source_priority=100, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="ssn", field_value="555-55-1207", confidence_score=0.8800, source_priority=80, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="uscis_elis_account_number", field_value="ELIS123456", confidence_score=0.7600, source_priority=50, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="marital_status", field_value="married", confidence_score=0.9500, source_priority=94, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="marriage_date", field_value="2021-06-18", confidence_score=0.9800, source_priority=98, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="marriage_place", field_value="San Antonio, Texas", confidence_score=0.9600, source_priority=97, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="conditional_residence_expires_on", field_value="2026-06-14", confidence_score=0.9800, source_priority=97, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="mailing_address", field_value="742 Evergreen Terrace Apt 3B, San Antonio, TX 78207", confidence_score=0.9300, source_priority=90, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="physical_address", field_value="742 Evergreen Terrace Apt 3B, San Antonio, TX 78207", confidence_score=0.9300, source_priority=90, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="in_removal_proceedings", field_value="no", confidence_score=0.9100, source_priority=80, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="arrest_history", field_value="no", confidence_score=0.9100, source_priority=80, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="joint_filing_party", field_value="spouse", confidence_score=0.9400, source_priority=90, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="spouse_relationship", field_value="spouse", confidence_score=0.9400, source_priority=90, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="spouse_last_name", field_value="Fuentes", confidence_score=0.9800, source_priority=97, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="spouse_first_name", field_value="Daniel", confidence_score=0.9800, source_priority=97, status="approved"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="spouse_middle_name", field_value="Alejandro", confidence_score=0.9000, source_priority=70, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="spouse_date_of_birth", field_value="1984-11-12", confidence_score=0.8700, source_priority=65, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="spouse_ssn", field_value="555-55-8910", confidence_score=0.7600, source_priority=50, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="spouse_physical_address", field_value="742 Evergreen Terrace Apt 3B, San Antonio, TX 78207", confidence_score=0.9300, source_priority=90, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="children", field_value=[{"full_name": "Sofia Fuentes Sabogal", "date_of_birth": "2023-02-17", "a_number": "", "living_with_you": "yes", "applying_with_you": "no", "address": "742 Evergreen Terrace Apt 3B, San Antonio, TX 78207"}], confidence_score=0.9200, source_priority=85, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="accommodation_requested_self", field_value="no", confidence_score=0.9300, source_priority=85, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="accommodation_requested_spouse", field_value="no", confidence_score=0.9300, source_priority=85, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="accommodation_requested_children", field_value="no", confidence_score=0.9300, source_priority=85, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="petitioner_can_read_english", field_value="yes", confidence_score=0.9000, source_priority=80, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="beneficiary_can_read_english", field_value="yes", confidence_score=0.9000, source_priority=80, status="confirmed"),
+                CaseCanonicalField(case_id=case.id, source_document_id=source_document_id, field_key="additional_information", field_value="Joint filing with one child, shared residence, shared finances, and six months of joint bank statements already uploaded.", confidence_score=0.8600, source_priority=75, status="confirmed"),
+            ])
     session.add_all(fields)
     await session.flush()
 
@@ -549,6 +691,7 @@ async def seed_reviews(session: Any, cases: dict[str, Case]) -> None:
         Review(case_id=cases["case_5"].id, review_type="attorney", reviewer_reference="staff-attorney-001", decision="approved", notes="Closed case was approved before submission.", reviewed_at=seeded_at(110)),
         Review(case_id=cases["case_5"].id, review_type="qa", reviewer_reference="staff-qa-001", decision="approved", notes="Final QA complete before archival.", reviewed_at=seeded_at(100)),
         Review(case_id=cases["case_6"].id, review_type="attorney", reviewer_reference="staff-attorney-001", decision="approved", notes="Humanitarian filing approved for submission before gateway failure.", reviewed_at=seeded_at(7)),
+        Review(case_id=cases["case_7"].id, review_type="attorney", reviewer_reference="staff-attorney-001", decision="changes_requested", notes="Demo ROC listo para revision; confirmar evidencia conjunta faltante antes del firmado final de la I-751.", reviewed_at=seeded_at(2)),
     ]
     session.add_all(reviews)
     await session.flush()
@@ -556,7 +699,18 @@ async def seed_reviews(session: Any, cases: dict[str, Case]) -> None:
 
 async def seed_packets(session: Any, cases: dict[str, Case], documents: dict[str, dict[str, Document]]) -> None:
     packets = []
-    for index, case_key in enumerate(["case_2", "case_3", "case_4", "case_5", "case_6"], start=1):
+    required_document_types = {
+        "passport",
+        "birth_certificate",
+        "marriage_certificate",
+        "evidence",
+        "conditional_resident_card",
+        "roc_questionnaire",
+        "joint_tax_returns",
+        "joint_bank_statements",
+        "relationship_photos",
+    }
+    for index, case_key in enumerate(["case_2", "case_3", "case_4", "case_5", "case_6", "case_7"], start=1):
         case = cases[case_key]
         current_documents = [document for document in documents[case_key].values() if document.is_current]
         packets.append(
@@ -567,7 +721,7 @@ async def seed_packets(session: Any, cases: dict[str, Case], documents: dict[str
                 generated_by_reference="staff-paralegal-001",
                 summary_payload={"case_id": str(case.id), "case_number": case.case_number, "case_type": case.case_type, "case_status": case.status, "title": case.title},
                 document_index=[{"document_id": str(document.id), "document_type": document.document_type, "title": document.original_filename, "original_filename": document.original_filename, "priority": position, "section": "Supporting Documents", "document_status": document.document_status, "processing_status": document.processing_status} for position, document in enumerate(current_documents, start=1)],
-                checklist_payload=[{"item_key": f"document:{document.document_type}", "label": document.document_type.replace("_", " ").title(), "status": "ready", "required": document.document_type in {"passport", "birth_certificate", "marriage_certificate", "evidence"}} for document in current_documents],
+                checklist_payload=[{"item_key": f"document:{document.document_type}", "label": document.document_type.replace("_", " ").title(), "status": "ready", "required": document.document_type in required_document_types} for document in current_documents],
                 export_artifact=build_packet_export(case.case_number, 1),
                 generation_notes=f"Seed packet {index} for QA flows.",
                 generated_at=seeded_at(8 - index),
@@ -585,6 +739,7 @@ async def seed_generated_forms(session: Any, cases: dict[str, Case], forms: dict
         GeneratedForm(case_id=cases["case_4"].id, form_id=forms["employment-based"].id, draft_version=1, status="approved", generated_payload=build_form_payload(form_code="I-140", form_name=forms["employment-based"].form_name, form_version=1, fields={"beneficiary.full_name": "Carlos Lopez", "job.offer_active": "yes", "petition.type": "eb2_niw"}), warnings_payload=[], export_path="/app/storage/generated-forms/CASE-QA-0004/I-140/draft-v1.json", review_notes="Filed from approved draft.", generated_at=seeded_at(12), reviewed_by_user_id="staff-attorney-001", reviewed_at=seeded_at(9)),
         GeneratedForm(case_id=cases["case_5"].id, form_id=forms["family-based"].id, draft_version=2, status="approved", generated_payload=build_form_payload(form_code="I-130", form_name=forms["family-based"].form_name, form_version=1, fields={"beneficiary.full_name": "MARIANA TORRES", "beneficiary.date_of_birth": "1994-07-30", "petition.category": "ir1"}), warnings_payload=[], export_path="/app/storage/generated-forms/CASE-QA-0005/I-130/draft-v2.json", review_notes="Historical approved draft retained for closed case.", generated_at=seeded_at(115), reviewed_by_user_id="staff-attorney-001", reviewed_at=seeded_at(112)),
         GeneratedForm(case_id=cases["case_6"].id, form_id=forms["humanitarian"].id, draft_version=1, status="approved", generated_payload=build_form_payload(form_code="I-589", form_name=forms["humanitarian"].form_name, form_version=1, fields={"applicant.full_name": "Jorge Castillo", "program.selected": "asylum", "narrative.summary": "Fear-based claim supported by declarations and country conditions."}), warnings_payload=[], export_path="/app/storage/generated-forms/CASE-QA-0006/I-589/draft-v1.json", review_notes="Approved before transmission failure.", generated_at=seeded_at(7), reviewed_by_user_id="staff-attorney-001", reviewed_at=seeded_at(6)),
+        GeneratedForm(case_id=cases["case_7"].id, form_id=forms["roc-i751"].id, draft_version=1, status="review_pending", generated_payload=build_form_payload(form_code="I-751", form_name=forms["roc-i751"].form_name, form_version=1, fields={"part_1.last_name": "SABOGAL FUENTES", "part_1.first_name": "LUZ ANGELA MARIA", "part_1.a_number": "A123456789", "part_1.date_of_birth": "1986-04-02", "part_1.marriage_date": "2021-06-18", "part_1.spouse_last_name": "FUENTES", "part_1.spouse_first_name": "DANIEL ALEJANDRO", "part_1.children_count": 1, "part_1.mailing_address": "742 Evergreen Terrace Apt 3B, San Antonio, TX 78207", "part_7.signature_required": True}), warnings_payload=[{"type": "attorney_review_required", "form_field_key": "part_3.criminal_history", "canonical_field_key": "arrest_history", "message": "Confirmar nuevamente que no existan arrestos, detenciones o citaciones no reportadas."}], export_path="/app/storage/generated-forms/CASE-QA-0007/I-751/draft-v1.json", review_notes="Borrador demo de I-751 armado a partir del cuestionario y evidencia ROC.", generated_at=seeded_at(1), reviewed_by_user_id=None, reviewed_at=None),
     ]
     session.add_all(generated_forms)
     await session.flush()
@@ -612,8 +767,118 @@ async def seed_audit_logs(session: Any, cases: dict[str, Case]) -> None:
         AuditLog(case_id=cases["case_4"].id, entity_type="case_submission", entity_id="seed-case-4-submission", action="case_submitted", actor_reference="staff-paralegal-001", payload={"submission_reference": "USCIS-EB2NIW-0004"}, occurred_at=seeded_at(2)),
         AuditLog(case_id=cases["case_5"].id, entity_type="case", entity_id=str(cases["case_5"].id), action="case_closed", actor_reference="staff-admin-001", payload={"notes": "Closed after successful filing."}, occurred_at=seeded_at(90)),
         AuditLog(case_id=cases["case_6"].id, entity_type="case_submission", entity_id="seed-case-6-submission", action="case_submission_failed", actor_reference="staff-paralegal-001", payload={"failure_reason": "Government gateway timeout during submission."}, occurred_at=seeded_at(1)),
+        AuditLog(case_id=cases["case_7"].id, entity_type="client_portal_access", entity_id="seed-case-7-portal", action="client_portal_access_seeded", actor_reference="system-seed", payload={"token_last4": SEED_PORTAL_CREDENTIALS["case_7"]["token"][-4:], "passcode_hint": "See seed reference file."}, occurred_at=seeded_at(1)),
+        AuditLog(case_id=cases["case_7"].id, entity_type="generated_form", entity_id="seed-case-7-i751", action="generated_form_created", actor_reference="system-seed", payload={"form_code": "I-751", "status": "review_pending"}, occurred_at=seeded_at(1)),
     ]
     session.add_all(logs)
+    await session.flush()
+
+
+async def seed_case_checklists(session: Any, cases: dict[str, Case]) -> None:
+    await ensure_roc_i751_defaults(session, "roc-i751")
+    template = await session.scalar(select(DocumentChecklistTemplate).where(DocumentChecklistTemplate.case_type == "roc-i751"))
+    template_items: list[DocumentChecklistTemplateItem] = []
+    if template is not None:
+        result = await session.scalars(
+            select(DocumentChecklistTemplateItem)
+            .where(DocumentChecklistTemplateItem.template_id == template.id)
+            .order_by(DocumentChecklistTemplateItem.display_order)
+        )
+        template_items = list(result)
+
+    checklist_items = [
+        CaseDocumentChecklistItem(
+            case_id=cases["case_1"].id,
+            label="Passport biographic page",
+            document_type="passport",
+            display_order=1,
+            applies=True,
+            requested=True,
+            received=False,
+            validated=False,
+            observations="Still missing from intake packet.",
+            copy_only=True,
+            is_manual=True,
+        ),
+        CaseDocumentChecklistItem(
+            case_id=cases["case_1"].id,
+            label="Birth certificate",
+            document_type="birth_certificate",
+            display_order=2,
+            applies=True,
+            requested=True,
+            received=False,
+            validated=False,
+            observations="Client must upload certified copy.",
+            copy_only=True,
+            is_manual=True,
+        ),
+    ]
+
+    received_document_types = {
+        "conditional_resident_card",
+        "marriage_certificate",
+        "joint_tax_returns",
+        "joint_bank_statements",
+        "children_birth_certificates",
+        "relationship_photos",
+        "roc_questionnaire",
+    }
+
+    for index, template_item in enumerate(template_items, start=1):
+        received = template_item.document_type in received_document_types
+        checklist_items.append(
+            CaseDocumentChecklistItem(
+                case_id=cases["case_7"].id,
+                template_item_id=template_item.id,
+                label=template_item.label,
+                document_type=template_item.document_type,
+                display_order=index,
+                applies=template_item.default_applies or received,
+                requested=template_item.default_applies,
+                received=received,
+                validated=received and template_item.document_type in {"conditional_resident_card", "marriage_certificate", "joint_tax_returns"},
+                observations=(
+                    "Marcado durante la entrevista ROC."
+                    if template_item.default_applies
+                    else "No aplica por ahora; puede activarse si surge durante la revision."
+                ),
+                color_required=template_item.color_required,
+                english_translation_required=template_item.english_translation_required,
+                signed_copy_required=template_item.signed_copy_required,
+                original_required=template_item.original_required,
+                copy_only=template_item.copy_only,
+                is_manual=False,
+            )
+        )
+
+    session.add_all(checklist_items)
+    await session.flush()
+
+
+async def seed_client_portal_accesses(session: Any, cases: dict[str, Case]) -> None:
+    accesses = []
+    for case_key, credentials in SEED_PORTAL_CREDENTIALS.items():
+        token = credentials["token"]
+        passcode = credentials["passcode"]
+        accesses.append(
+            ClientPortalAccess(
+                case_id=cases[case_key].id,
+                token_hash=sha_for(token),
+                token_last4=token[-4:],
+                passcode_hash=sha_for(passcode),
+                access_session_hash=None,
+                access_session_expires_at=None,
+                instructions=credentials["instructions"],
+                expires_at=BASE_TIME + timedelta(days=21),
+                is_active=True,
+                last_accessed_at=None,
+                failed_access_attempt_count=0,
+                last_failed_access_at=None,
+                locked_until=None,
+            )
+        )
+    session.add_all(accesses)
     await session.flush()
 
 
@@ -628,6 +893,24 @@ def write_reference_files(output_root: Path, cases: dict[str, Case]) -> None:
                 "cases": [
                     {"case_number": case.case_number, "case_type": case.case_type, "status": case.status, "title": case.title, "summary": case.summary}
                     for case in cases.values()
+                ]
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (reference_root / "client-portal-demo.json").write_text(
+        json.dumps(
+            {
+                "portals": [
+                    {
+                        "case_number": cases[case_key].case_number,
+                        "case_title": cases[case_key].title,
+                        "portal_path": f"/portal/{credentials['token']}",
+                        "token": credentials["token"],
+                        "passcode": credentials["passcode"],
+                    }
+                    for case_key, credentials in SEED_PORTAL_CREDENTIALS.items()
                 ]
             },
             indent=2,

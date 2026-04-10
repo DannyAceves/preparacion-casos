@@ -217,18 +217,18 @@ export function AssistedFormWorkspace({
   }
 
   if (loading) {
-    return <LoadingState label="Loading assisted form workspace..." />;
+    return <LoadingState label="Cargando espacio de trabajo del formulario..." />;
   }
 
   if (error && !workspace) {
-    return <ErrorState title="Could not load assisted form workspace" description={error} />;
+    return <ErrorState title="No se pudo cargar el espacio de trabajo del formulario" description={error} />;
   }
 
   if (!workspace) {
     return (
       <EmptyState
-        title="No assisted form workspace"
-        description="Generate a form draft first so the field-by-field workspace can be prepared."
+        title="No hay espacio de trabajo del formulario"
+        description="Genera primero un borrador para preparar la revision campo por campo."
       />
     );
   }
@@ -244,7 +244,7 @@ export function AssistedFormWorkspace({
         </div>
         <div className="case-hero__badges">
           <Badge tone={toneForStatus(workspace.status)}>{workspace.status}</Badge>
-          <Badge tone="warning">{workspace.warnings.length} warnings</Badge>
+          <Badge tone="warning">{workspace.warnings.length} alertas</Badge>
         </div>
       </section>
 
@@ -254,7 +254,7 @@ export function AssistedFormWorkspace({
       <div className="assisted-form-workspace">
         <div className="assisted-form-workspace__main">
           {workspace.sections.map((section) => (
-            <Card key={section.section_key} title={section.section_title} subtitle={`${section.fields.length} field(s)`}>
+            <Card key={section.section_key} title={section.section_title} subtitle={`${section.fields.length} campo(s)`}>
               <div className="page-stack">
                 {section.fields.map((field) => (
                   <button
@@ -269,14 +269,14 @@ export function AssistedFormWorkspace({
                         <p>{field.form_field_key}</p>
                       </div>
                       <div className="case-hero__badges">
-                        {field.required ? <Badge tone="warning">required</Badge> : null}
+                        {field.required ? <Badge tone="warning">obligatorio</Badge> : null}
                         {field.manual_override ? <Badge tone="info">manual</Badge> : null}
                         {field.selected_source_label ? <Badge tone="neutral">{field.selected_source_label}</Badge> : null}
                       </div>
                     </div>
                     <div className="entity-card__meta">
-                      <p>Current value: {stringifyValue(field.value) || "No value selected"}</p>
-                      <p>{field.suggestions.length} suggestion(s) available</p>
+                      <p>Valor actual: {stringifyValue(field.value) || "Sin valor seleccionado"}</p>
+                      <p>{field.suggestions.length} sugerencia(s) disponibles</p>
                     </div>
                     {field.warnings.length ? (
                       <div className="case-hero__badges">
@@ -296,10 +296,10 @@ export function AssistedFormWorkspace({
 
         <aside className="assisted-form-workspace__sidebar">
           {!selectedField ? (
-            <Card title="Field Suggestions" subtitle="Select a field to review suggested values and traceability.">
+            <Card title="Sugerencias del campo" subtitle="Selecciona un campo para revisar valores sugeridos y su trazabilidad.">
               <EmptyState
-                title="No field selected"
-                description="Choose a field from the form sections to inspect its value sources."
+                title="No hay campo seleccionado"
+                description="Elige un campo del formulario para inspeccionar sus valores fuente."
               />
             </Card>
           ) : (
@@ -307,14 +307,14 @@ export function AssistedFormWorkspace({
               <Card title={selectedField.field_label} subtitle={selectedField.form_field_key}>
                 <div className="entity-form">
                   <div className="case-hero__badges">
-                    {selectedField.required ? <Badge tone="warning">required</Badge> : null}
+                    {selectedField.required ? <Badge tone="warning">obligatorio</Badge> : null}
                     <Badge tone="neutral">{selectedField.field_type}</Badge>
                     <Badge tone="info">{selectedField.canonical_field_key}</Badge>
                   </div>
                   {selectedField.help_text ? <p className="entity-card__hint">{selectedField.help_text}</p> : null}
 
                   <label className="ui-field">
-                    <span>Current Value</span>
+                    <span>Valor actual</span>
                     {selectedField.field_type === "textarea" || selectedField.field_type === "repeatable_group" ? (
                       <textarea
                         className="ui-textarea"
@@ -324,8 +324,8 @@ export function AssistedFormWorkspace({
                       />
                     ) : selectedField.field_type === "checkbox" ? (
                       <select value={fieldDraft} onChange={(event) => setFieldDraft(event.target.value)}>
-                        <option value="">Select an option</option>
-                        <option value="true">Yes</option>
+                        <option value="">Seleccione una opcion</option>
+                        <option value="true">Si</option>
                         <option value="false">No</option>
                       </select>
                     ) : (
@@ -347,17 +347,17 @@ export function AssistedFormWorkspace({
 
                   <div className="entity-form__actions">
                     <button type="button" className="ui-button" disabled={busyAction === "save"} onClick={() => void handleSaveField()}>
-                      {busyAction === "save" ? "Saving..." : "Save field"}
+                      {busyAction === "save" ? "Guardando..." : "Guardar campo"}
                     </button>
                   </div>
                 </div>
               </Card>
 
-              <Card title="Suggested Values" subtitle="Canonical fields, questionnaire answers and extracted document values.">
+              <Card title="Valores sugeridos" subtitle="Campos canonicos, respuestas del cuestionario y valores extraidos de documentos.">
                 {!selectedField.suggestions.length ? (
                   <EmptyState
-                    title="No suggestions available"
-                    description="This field does not have source values yet, so it must be completed manually."
+                    title="No hay sugerencias disponibles"
+                    description="Este campo todavia no tiene valores fuente, por lo que debe completarse manualmente."
                   />
                 ) : (
                   <div className="page-stack">
@@ -374,12 +374,12 @@ export function AssistedFormWorkspace({
                             disabled={busyAction === "save"}
                             onClick={() => void handleAcceptSuggestion(index)}
                           >
-                            Use this value
+                            Usar este valor
                           </button>
                         </div>
                         <pre className="entity-card__evidence">{JSON.stringify(suggestion.value, null, 2)}</pre>
                         {suggestion.source_document_name ? (
-                          <p className="entity-card__hint">Source document: {suggestion.source_document_name}</p>
+                          <p className="entity-card__hint">Documento fuente: {suggestion.source_document_name}</p>
                         ) : null}
                       </div>
                     ))}
@@ -387,10 +387,10 @@ export function AssistedFormWorkspace({
                 )}
               </Card>
 
-              <Card title="Review" subtitle="Finalize the draft after field-level review.">
+              <Card title="Revision" subtitle="Finaliza el borrador despues de revisar cada campo.">
                 <div className="entity-form">
                   <label className="ui-field">
-                    <span>Reviewed By User</span>
+                    <span>Revisado por</span>
                     <input
                       value={reviewedByUserId}
                       onChange={(event) => setReviewedByUserId(event.target.value)}
@@ -398,7 +398,7 @@ export function AssistedFormWorkspace({
                     />
                   </label>
                   <label className="ui-field">
-                    <span>Review Notes</span>
+                    <span>Notas de revision</span>
                     <textarea
                       className="ui-textarea"
                       value={reviewNotes}
@@ -408,10 +408,10 @@ export function AssistedFormWorkspace({
                   </label>
                   <div className="entity-form__actions">
                     <button type="button" className="ui-button" disabled={busyAction !== null} onClick={() => void handleApprove()}>
-                      {busyAction === "approve" ? "Approving..." : "Approve"}
+                      {busyAction === "approve" ? "Aprobando..." : "Aprobar"}
                     </button>
                     <button type="button" className="ui-button ui-button--ghost" disabled={busyAction !== null} onClick={() => void handleFix()}>
-                      {busyAction === "fix" ? "Saving..." : "Mark fix required"}
+                      {busyAction === "fix" ? "Guardando..." : "Marcar correccion requerida"}
                     </button>
                   </div>
                 </div>

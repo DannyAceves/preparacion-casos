@@ -102,7 +102,7 @@ export function ClientPortalAccessPanel({
   }
 
   return (
-    <Card title="Client Portal Access" subtitle="Issue a secure beta link so the client can complete intake and upload documents.">
+    <Card title="Client Portal Access" subtitle="Issue a secure link so the client can complete the questionnaire, review instructions, and upload requested evidence.">
       <div className="page-stack">
         {loading ? <LoadingState label="Loading client portal access..." /> : null}
 
@@ -188,7 +188,7 @@ export function ClientPortalAccessPanel({
                 className="ui-textarea"
                 value={instructions}
                 onChange={(event) => setInstructions(event.target.value)}
-                placeholder="Explain what the client should complete first and what documents should be uploaded."
+                placeholder="Explain what the client should complete first, which ROC checklist items apply, and what documents should be uploaded."
               />
             </FormField>
             <FormField

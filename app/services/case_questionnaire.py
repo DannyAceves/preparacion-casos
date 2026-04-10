@@ -27,6 +27,7 @@ from app.schemas.case_questionnaire import (
     QuestionnaireSectionRead,
     QuestionnaireTemplateSummaryRead,
 )
+from app.services.roc_i751_defaults import ensure_roc_i751_defaults
 
 
 class CaseQuestionnaireService:
@@ -188,6 +189,7 @@ class CaseQuestionnaireService:
         if questionnaire_instance is not None and questionnaire_instance.template_id is not None:
             template = await self.template_repository.get_full(questionnaire_instance.template_id)
         if template is None:
+            await ensure_roc_i751_defaults(self.session, case.case_type)
             template = await self.template_repository.get_active_for_case_type(case.case_type)
         if template is None:
             raise HTTPException(

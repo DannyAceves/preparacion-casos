@@ -88,7 +88,7 @@ export function GeneratedFormCard({
     <div className="entity-card">
       <div className="entity-card__header entity-card__header--spread">
         <div>
-          <strong>{detail?.form.form_name ?? "Generated form"}</strong>
+          <strong>{detail?.form.form_name ?? "Formulario generado"}</strong>
           <p>{detail?.form.form_code ?? form.form_id}</p>
         </div>
         <div className="case-hero__badges">
@@ -98,27 +98,27 @@ export function GeneratedFormCard({
       </div>
 
       <div className="entity-card__meta">
-        <p>Generated at: {new Date(form.generated_at).toLocaleString()}</p>
-        <p>Reviewed at: {form.reviewed_at ? new Date(form.reviewed_at).toLocaleString() : "Not reviewed"}</p>
-        <p>Export path: {form.export_path ?? "Not available"}</p>
+        <p>Generado: {new Date(form.generated_at).toLocaleString()}</p>
+        <p>Revisado: {form.reviewed_at ? new Date(form.reviewed_at).toLocaleString() : "Sin revision"}</p>
+        <p>Ruta de exportacion: {form.export_path ?? "No disponible"}</p>
       </div>
 
       <div className="document-actions">
         {permissions.can("generate_forms") ? (
           <Link className="ui-button" href={`/cases/${caseId}/forms/${form.id}`}>
-            Open workspace
+            Abrir espacio de trabajo
           </Link>
         ) : null}
         <button type="button" className="ui-button ui-button--ghost" disabled={busyAction === "loading"} onClick={() => void handleExpand()}>
-          {expanded ? "Hide detail" : busyAction === "loading" ? "Loading detail..." : "View detail"}
+          {expanded ? "Ocultar detalle" : busyAction === "loading" ? "Cargando detalle..." : "Ver detalle"}
         </button>
       </div>
 
       {expanded && detail ? (
         <div className="page-stack">
           <div className="entity-card__meta">
-            <p>Template version: {detail.form.version}</p>
-            <p>Case type: {detail.form.case_type_id}</p>
+            <p>Version del template: {detail.form.version}</p>
+            <p>Tipo de caso: {detail.form.case_type_id}</p>
           </div>
 
           <pre className="entity-card__evidence">{JSON.stringify(detail.generated_payload, null, 2)}</pre>
@@ -129,10 +129,10 @@ export function GeneratedFormCard({
         </div>
       ) : null}
 
-      <PermissionGate action="review_forms" fallback={<p className="entity-card__hint">Your role can prepare and inspect forms here, but approval is restricted.</p>}>
+      <PermissionGate action="review_forms" fallback={<p className="entity-card__hint">Tu rol puede preparar e inspeccionar formularios aqui, pero la aprobacion esta restringida.</p>}>
         <div className="entity-card__grid">
           <label className="ui-field">
-            <span>Reviewed By User</span>
+            <span>Revisado por</span>
             <input
               value={reviewedByUserId}
               onChange={(event) => setReviewedByUserId(event.target.value)}
@@ -141,11 +141,11 @@ export function GeneratedFormCard({
           </label>
 
           <label className="ui-field entity-card__field-span">
-            <span>Review Notes</span>
+            <span>Notas de revision</span>
             <input
               value={reviewNotes}
               onChange={(event) => setReviewNotes(event.target.value)}
-              placeholder="Review notes or fix instructions"
+              placeholder="Notas de revision o instrucciones de correccion"
             />
           </label>
         </div>
@@ -159,7 +159,7 @@ export function GeneratedFormCard({
             disabled={busyAction !== null || !reviewedByUserId.trim()}
             onClick={() => void handleApprove()}
           >
-            {busyAction === "approve" ? "Approving..." : "Approve"}
+            {busyAction === "approve" ? "Aprobando..." : "Aprobar"}
           </button>
           <button
             type="button"
@@ -167,7 +167,7 @@ export function GeneratedFormCard({
             disabled={busyAction !== null || !reviewedByUserId.trim()}
             onClick={() => void handleFix()}
           >
-            {busyAction === "fix" ? "Saving..." : "Mark fix required"}
+            {busyAction === "fix" ? "Guardando..." : "Marcar correccion requerida"}
           </button>
         </div>
       </PermissionGate>
