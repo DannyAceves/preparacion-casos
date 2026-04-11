@@ -774,6 +774,7 @@ async def _ensure_i751_form(session: AsyncSession, case_type: str) -> None:
         .order_by(Form.version.desc())
     )
     form = result.scalars().first()
+    existing_field_keys: set[str] = set()
     if form is None:
         form = Form(
             case_type_id=case_type,
@@ -784,8 +785,8 @@ async def _ensure_i751_form(session: AsyncSession, case_type: str) -> None:
         )
         session.add(form)
         await session.flush()
-
-    existing_field_keys = {mapping.form_field_key for mapping in form.field_mappings}
+    else:
+        existing_field_keys = {mapping.form_field_key for mapping in form.field_mappings}
     for mapping in ROC_FORM_TEMPLATE["mappings"]:
         if mapping["form_field_key"] in existing_field_keys:
             continue
@@ -804,6 +805,7 @@ async def _ensure_i751_form(session: AsyncSession, case_type: str) -> None:
                 required=bool(mapping.get("required", False)),
             )
         )
+        existing_field_keys.add(mapping["form_field_key"])
     await session.flush()
 
 

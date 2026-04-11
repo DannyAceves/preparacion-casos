@@ -10,6 +10,7 @@ from app.models.audit_log import AuditLog
 from app.models.case import Case
 from app.repositories.audit_log import AuditLogRepository
 from app.repositories.case import CaseRepository
+from app.repositories.document_checklist import CaseDocumentChecklistItemRepository
 from app.repositories.document import DocumentRepository
 from app.repositories.generated_form import GeneratedFormRepository
 from app.repositories.inconsistency import InconsistencyRepository
@@ -33,6 +34,7 @@ class CaseReadinessService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.case_repository = CaseRepository(session)
+        self.checklist_item_repository = CaseDocumentChecklistItemRepository(session)
         self.document_repository = DocumentRepository(session)
         self.generated_form_repository = GeneratedFormRepository(session)
         self.inconsistency_repository = InconsistencyRepository(session)
@@ -41,11 +43,12 @@ class CaseReadinessService:
 
     async def get_readiness(self, case_id: uuid.UUID) -> CaseReadinessRead:
         case = await self._get_case(case_id)
+        checklist_items = await self.checklist_item_repository.list_for_case(case_id)
         documents = await self.document_repository.list_current_for_case(case_id)
         inconsistencies = await self.inconsistency_repository.list_for_case(case_id)
         generated_forms = await self.generated_form_repository.list_for_case(case_id)
         reviews = await self.review_repository.list_for_case(case_id)
-        return self._build_readiness(case, documents, inconsistencies, generated_forms, reviews)
+        return self._build_readiness(case, checklist_items, documents, inconsistencies, generated_forms, reviews)
 
     async def validate_readiness(
         self,
@@ -104,23 +107,22 @@ class CaseReadinessService:
     def _build_readiness(
         self,
         case: Case,
+        checklist_items: list[object],
         documents: list[object],
         inconsistencies: list[object],
         generated_forms: list[object],
         reviews: list[object],
     ) -> CaseReadinessRead:
-        required_document_types = REQUIRED_DOCUMENTS_BY_CASE_TYPE.get(case.case_type, ["passport", "evidence"])
         valid_documents = [
             document
             for document in documents
             if document.document_status not in {"rejected", "archived"}
             and document.processing_status != "failed"
         ]
-        present_required_document_types = sorted(
-            {document.document_type for document in valid_documents if document.document_type in required_document_types}
-        )
-        missing_required_document_types = sorted(
-            [document_type for document_type in required_document_types if document_type not in present_required_document_types]
+        required_document_types, present_required_document_types, missing_required_document_types = self._resolve_document_requirements(
+            case.case_type,
+            checklist_items,
+            valid_documents,
         )
 
         open_high_or_critical_inconsistencies = [
@@ -239,6 +241,36 @@ class CaseReadinessService:
             summary=summary,
             targets=targets,
         )
+
+    def _resolve_document_requirements(
+        self,
+        case_type: str,
+        checklist_items: list[object],
+        valid_documents: list[object],
+    ) -> tuple[list[str], list[str], list[str]]:
+        applicable_requested_items = [
+            item
+            for item in checklist_items
+            if item.applies and item.requested and item.document_type
+        ]
+        if applicable_requested_items:
+            required_document_types = sorted({item.document_type for item in applicable_requested_items})
+            present_required_document_types = sorted(
+                {item.document_type for item in applicable_requested_items if item.received}
+            )
+            missing_required_document_types = sorted(
+                {item.document_type for item in applicable_requested_items if not item.received}
+            )
+            return required_document_types, present_required_document_types, missing_required_document_types
+
+        required_document_types = REQUIRED_DOCUMENTS_BY_CASE_TYPE.get(case_type, ["passport", "evidence"])
+        present_required_document_types = sorted(
+            {document.document_type for document in valid_documents if document.document_type in required_document_types}
+        )
+        missing_required_document_types = sorted(
+            [document_type for document_type in required_document_types if document_type not in present_required_document_types]
+        )
+        return required_document_types, present_required_document_types, missing_required_document_types
 
     def _build_document_blockers(self, missing_required_document_types: list[str]) -> list[CaseReadinessIssueRead]:
         blockers: list[CaseReadinessIssueRead] = []

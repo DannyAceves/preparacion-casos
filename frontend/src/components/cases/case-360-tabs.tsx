@@ -174,7 +174,14 @@ export function Case360Tabs({ caseItem, readiness }: Case360TabsProps): JSX.Elem
 
       {!loading && !error && data ? (
         <TabPanel>
-          {activeTab === "overview" ? <OverviewTab caseItem={caseItem} readiness={currentReadiness} data={data} /> : null}
+          {activeTab === "overview" ? (
+            <OverviewTab
+              caseItem={caseItem}
+              readiness={currentReadiness}
+              data={data}
+              canIssueClientPortalAccess={permissions.can("issue_client_portal_access")}
+            />
+          ) : null}
           {activeTab === "questionnaire" ? (
             <CaseQuestionnairePanel
               caseId={caseItem.id}
@@ -263,10 +270,12 @@ function OverviewTab({
   caseItem,
   readiness,
   data,
+  canIssueClientPortalAccess,
 }: {
   caseItem: Case;
   readiness: CaseReadiness;
   data: CaseWorkspaceData;
+  canIssueClientPortalAccess: boolean;
 }): JSX.Element {
   const latestReview = data.reviews[0] ?? null;
   const approvedForms = data.forms.filter((form) => form.status === "approved").length;
@@ -316,7 +325,7 @@ function OverviewTab({
         </div>
       </Card>
 
-      {permissions.can("issue_client_portal_access") ? (
+      {canIssueClientPortalAccess ? (
         <ClientPortalAccessPanel caseId={caseItem.id} caseTitle={caseItem.title} />
       ) : (
         <Card title="Client Portal Access" subtitle="Access to portal issuance is limited by role.">

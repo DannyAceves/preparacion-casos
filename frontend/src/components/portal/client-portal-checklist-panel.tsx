@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { isRocI751CaseType, localizeRocDocumentLabel, localizeRocDocumentType } from "@/lib/roc-i751-localization";
 import { CaseDocumentChecklist, CaseDocumentChecklistItem } from "@/types/workspace";
 
 interface ClientPortalChecklistPanelProps {
@@ -21,6 +22,7 @@ export function ClientPortalChecklistPanel({
   checklist,
 }: ClientPortalChecklistPanelProps): JSX.Element {
   const orderedItems = [...checklist.items].sort((left, right) => left.display_order - right.display_order);
+  const isRocChecklist = isRocI751CaseType(checklist.template_case_type);
 
   return (
     <Card
@@ -51,13 +53,13 @@ export function ClientPortalChecklistPanel({
 
           <div className="checklist-items">
             {orderedItems.map((item) => (
-              <div key={item.id} className="entity-card">
-                <div className="entity-card__header entity-card__header--spread">
+              <div key={item.id} className="entity-card client-checklist-card">
+                <div className="entity-card__header client-checklist-card__header">
                   <div>
-                    <strong>{item.label}</strong>
-                    <p>{item.document_type ?? "Documento general de soporte"}</p>
+                    <strong>{isRocChecklist ? localizeRocDocumentLabel(item.document_type, item.label) : item.label}</strong>
+                    <p>{isRocChecklist ? localizeRocDocumentType(item.document_type) : item.document_type ?? "Documento general de soporte"}</p>
                   </div>
-                  <div className="case-hero__badges">
+                  <div className="case-hero__badges client-checklist-card__badges">
                     <Badge tone={item.applies ? "info" : "neutral"}>
                       {item.applies ? "Aplica" : "No aplica"}
                     </Badge>

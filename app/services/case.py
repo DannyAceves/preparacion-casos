@@ -23,6 +23,21 @@ class CaseService(BaseService[Case, CaseCreate, CaseUpdate]):
         await self.ensure_exists(Client, payload.client_id, "client")
         return await super().create(payload)
 
+    async def list(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> list[Case]:
+        return await self.repository.list(
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
     async def update(self, entity_id: uuid.UUID, payload: CaseUpdate) -> Case:
         if payload.client_id is not None:
             await self.ensure_exists(Client, payload.client_id, "client")

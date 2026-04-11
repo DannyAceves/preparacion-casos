@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authz import authorize_case_access, require_permissions_for
@@ -18,8 +18,17 @@ SessionDep = Annotated[AsyncSession, Depends(get_session_dependency)]
 async def list_cases(
     session: SessionDep,
     _: Annotated[object, Depends(require_permissions_for(Permission.VIEW_CASES))],
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    sort_by: Annotated[str, Query(pattern="^(created_at|updated_at|case_number|title|status|case_type)$")] = "created_at",
+    sort_order: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
 ) -> list[CaseRead]:
-    return await CaseService(session).list()
+    return await CaseService(session).list(
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
 
 
 @router.post("", response_model=CaseRead, status_code=status.HTTP_201_CREATED)

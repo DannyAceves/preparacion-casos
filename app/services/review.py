@@ -15,7 +15,7 @@ from app.repositories.review import ReviewRepository
 from app.schemas.review import CaseReviewCreateRequest, TimelineEventRead
 
 ALLOWED_REVIEW_TYPES = {"paralegal", "attorney", "qa"}
-ALLOWED_REVIEW_DECISIONS = {"fix_required", "approved", "rejected"}
+ALLOWED_REVIEW_DECISIONS = {"fix_required", "changes_requested", "approved", "rejected"}
 
 
 class ReviewService:

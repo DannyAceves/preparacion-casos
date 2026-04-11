@@ -7,6 +7,9 @@ interface RepeatableGroupFieldProps {
   fieldNames: string[];
   value: RepeatableGroupItem[];
   onChange: (value: RepeatableGroupItem[]) => void;
+  fieldLabelResolver?: (fieldName: string) => string;
+  itemDescription?: string;
+  addButtonLabel?: string;
 }
 
 function humanizeFieldName(fieldName: string): string {
@@ -20,6 +23,9 @@ export function RepeatableGroupField({
   fieldNames,
   value,
   onChange,
+  fieldLabelResolver,
+  itemDescription,
+  addButtonLabel,
 }: RepeatableGroupFieldProps): JSX.Element {
   const items = value.length ? value : [{}];
 
@@ -48,7 +54,7 @@ export function RepeatableGroupField({
               <strong>
                 {itemLabel} {index + 1}
               </strong>
-              <p>Capture la informacion correspondiente.</p>
+              <p>{itemDescription ?? "Capture la informacion correspondiente."}</p>
             </div>
             <button type="button" className="ui-button ui-button--ghost" onClick={() => handleRemove(index)}>
               Eliminar
@@ -58,7 +64,7 @@ export function RepeatableGroupField({
           <div className="entity-form__grid">
             {fieldNames.map((fieldName) => (
               <label key={`${itemLabel}-${index}-${fieldName}`} className="ui-field">
-                <span>{humanizeFieldName(fieldName)}</span>
+                <span>{fieldLabelResolver ? fieldLabelResolver(fieldName) : humanizeFieldName(fieldName)}</span>
                 <input
                   value={item[fieldName] ?? ""}
                   onChange={(event) => handleItemChange(index, fieldName, event.target.value)}
@@ -71,7 +77,7 @@ export function RepeatableGroupField({
 
       <div className="entity-form__actions">
         <button type="button" className="ui-button ui-button--ghost" onClick={handleAdd}>
-          Agregar {itemLabel.toLowerCase()}
+          {addButtonLabel ?? `Agregar ${itemLabel.toLowerCase()}`}
         </button>
       </div>
     </div>

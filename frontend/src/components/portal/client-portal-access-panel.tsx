@@ -8,7 +8,9 @@ import { FormFeedback } from "@/components/ui/form-feedback";
 import { FormField } from "@/components/ui/form-field";
 import { LoadingState } from "@/components/ui/loading-state";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import { buildPrincipalHeaders } from "@/lib/auth/principal-headers";
 import { getCaseClientPortalAccess, issueCaseClientPortalAccess } from "@/services/client-portal";
+import { useAuth } from "@/providers/auth-provider";
 import { ClientPortalAccess, ClientPortalIssuedAccess } from "@/types/client-portal";
 
 interface ClientPortalAccessPanelProps {
@@ -28,6 +30,7 @@ export function ClientPortalAccessPanel({
   caseId,
   caseTitle,
 }: ClientPortalAccessPanelProps): JSX.Element {
+  const { session } = useAuth();
   const [access, setAccess] = useState<ClientPortalAccess | null>(null);
   const [issuedAccess, setIssuedAccess] = useState<ClientPortalIssuedAccess | null>(null);
   const [instructions, setInstructions] = useState("");
@@ -36,6 +39,7 @@ export function ClientPortalAccessPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const principalHeaders = useMemo(() => buildPrincipalHeaders(session), [session]);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +49,7 @@ export function ClientPortalAccessPanel({
       setError(null);
 
       try {
-        const nextAccess = await getCaseClientPortalAccess(caseId);
+        const nextAccess = await getCaseClientPortalAccess(caseId, { headers: principalHeaders });
         if (!cancelled) {
           setAccess(nextAccess);
           if (nextAccess?.instructions) {
@@ -68,7 +72,7 @@ export function ClientPortalAccessPanel({
     return () => {
       cancelled = true;
     };
-  }, [caseId]);
+  }, [caseId, principalHeaders]);
 
   const portalUrl = useMemo(() => {
     if (!issuedAccess) {
@@ -90,7 +94,7 @@ export function ClientPortalAccessPanel({
       const issued = await issueCaseClientPortalAccess(caseId, {
         instructions: instructions.trim() || null,
         expires_in_days: Number(expiresInDays) || 7,
-      });
+      }, { headers: principalHeaders });
       setAccess(issued);
       setIssuedAccess(issued);
       setMessage("Client portal access issued successfully.");

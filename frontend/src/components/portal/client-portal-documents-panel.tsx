@@ -8,6 +8,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { FormField } from "@/components/ui/form-field";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import {
+  isRocI751CaseType,
+  localizeDocumentStatus,
+  localizeProcessingStatus,
+  localizeRocDocumentLabel,
+  localizeRocDocumentType,
+} from "@/lib/roc-i751-localization";
 import { uploadClientPortalDocument } from "@/services/client-portal";
 import { CaseDocumentChecklist, DocumentRecord } from "@/types/workspace";
 
@@ -39,6 +46,7 @@ export function ClientPortalDocumentsPanel({
     () => checklist.items.filter((item) => item.applies).sort((left, right) => left.display_order - right.display_order),
     [checklist.items],
   );
+  const isRocChecklist = isRocI751CaseType(checklist.template_case_type);
 
   const selectedItem =
     applicableItems.find((item) => item.id === selectedChecklistItemId) ?? null;
@@ -46,7 +54,7 @@ export function ClientPortalDocumentsPanel({
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!selectedFile) {
-      setError("Select a file to upload.");
+      setError("Selecciona un archivo para cargar.");
       return;
     }
 
@@ -65,9 +73,9 @@ export function ClientPortalDocumentsPanel({
       setSelectedFile(null);
       setSelectedChecklistItemId("");
       setManualDocumentType("");
-      setMessage("Document uploaded successfully.");
+      setMessage("Documento cargado correctamente.");
     } catch (uploadError) {
-      setError(getApiErrorMessage(uploadError, "Could not upload document."));
+      setError(getApiErrorMessage(uploadError, "No se pudo cargar el documento."));
     } finally {
       setSubmitting(false);
     }
@@ -75,43 +83,49 @@ export function ClientPortalDocumentsPanel({
 
   return (
     <div className="page-stack">
-      <Card title="Upload Documents" subtitle="Securely send the requested files to your legal team.">
+      <Card title="Cargar documentos" subtitle="Envia de forma segura los archivos solicitados a tu equipo legal.">
         <form className="entity-form" onSubmit={(event) => void handleSubmit(event)}>
           <div className="entity-form__grid">
             <FormField
-              label="Checklist item"
+              label="Documento solicitado"
               htmlFor="portal-checklist-item"
-              hint="Choose a requested item when possible so the case checklist updates automatically."
+              hint="Elige el requisito correspondiente para que la lista del caso se actualice automaticamente."
             >
               <select
                 id="portal-checklist-item"
                 value={selectedChecklistItemId}
                 onChange={(event) => setSelectedChecklistItemId(event.target.value)}
               >
-                <option value="">Select a document request</option>
+                <option value="">Selecciona un requisito</option>
                 {applicableItems.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.label}
+                    {isRocChecklist ? localizeRocDocumentLabel(item.document_type, item.label) : item.label}
                   </option>
                 ))}
               </select>
             </FormField>
 
             <FormField
-              label="Document type"
+              label="Tipo de documento"
               htmlFor="portal-document-type"
-              hint="Use this only if the file does not map cleanly to a checklist item."
+              hint="Usa este campo solo si el archivo no corresponde claramente a un requisito de la lista."
             >
               <input
                 id="portal-document-type"
-                value={selectedItem?.document_type ?? manualDocumentType}
+                value={
+                  selectedItem?.document_type
+                    ? (isRocChecklist
+                        ? localizeRocDocumentType(selectedItem.document_type)
+                        : selectedItem.document_type)
+                    : manualDocumentType
+                }
                 disabled={Boolean(selectedItem?.document_type)}
                 onChange={(event) => setManualDocumentType(event.target.value)}
-                placeholder="passport, tax_return, marriage_certificate"
+                placeholder="acta_matrimonio, estados_bancarios, evidencia_relacion"
               />
             </FormField>
 
-            <FormField label="File" htmlFor="portal-document-file">
+            <FormField label="Archivo" htmlFor="portal-document-file">
               <input
                 id="portal-document-file"
                 type="file"
@@ -125,18 +139,18 @@ export function ClientPortalDocumentsPanel({
 
           <div className="entity-form__actions">
             <button type="submit" className="ui-button" disabled={submitting}>
-              {submitting ? "Uploading..." : "Upload document"}
+              {submitting ? "Cargando..." : "Cargar documento"}
             </button>
           </div>
         </form>
       </Card>
 
-      <Card title="Received Documents" subtitle="Files already submitted through the portal or internal intake.">
-        <p className="entity-card__hint">Only documents submitted through your own portal access are shown here.</p>
+      <Card title="Documentos recibidos" subtitle="Archivos ya enviados por portal o capturados en el expediente.">
+        <p className="entity-card__hint">Aqui solo se muestran los documentos asociados a este expediente.</p>
         {!documents.length ? (
           <EmptyState
-            title="No documents received yet"
-            description="Upload the first file to start building the case packet."
+            title="Aun no hay documentos recibidos"
+            description="Carga el primer archivo para comenzar a integrar el expediente."
           />
         ) : (
           <div className="page-stack">
@@ -145,24 +159,28 @@ export function ClientPortalDocumentsPanel({
                 <div className="entity-card__header entity-card__header--spread">
                   <div>
                     <strong>{document.original_filename}</strong>
-                    <p>{document.classification_label ?? document.document_type}</p>
+                    <p>
+                      {isRocChecklist
+                        ? localizeRocDocumentType(document.classification_label ?? document.document_type)
+                        : document.classification_label ?? document.document_type}
+                    </p>
                   </div>
                   <div className="case-hero__badges">
-                    <Badge tone="warning">{document.document_status}</Badge>
+                    <Badge tone="warning">{localizeDocumentStatus(document.document_status)}</Badge>
                     <Badge tone="neutral">{document.mime_type}</Badge>
                   </div>
                 </div>
                 <div className="entity-card__grid">
                   <div>
-                    <strong>Uploaded</strong>
+                    <strong>Cargado</strong>
                     <p>{formatDateTime(document.uploaded_at)}</p>
                   </div>
                   <div>
-                    <strong>Status</strong>
-                    <p>{document.processing_status}</p>
+                    <strong>Procesamiento</strong>
+                    <p>{localizeProcessingStatus(document.processing_status)}</p>
                   </div>
                   <div>
-                    <strong>Size</strong>
+                    <strong>Tamano</strong>
                     <p>{Math.max(1, Math.round(document.size_bytes / 1024))} KB</p>
                   </div>
                 </div>

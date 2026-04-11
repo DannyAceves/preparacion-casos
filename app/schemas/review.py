@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from app.schemas.common import ORMBaseSchema, TimestampedSchema
 
 ReviewType = Literal["paralegal", "attorney", "qa"]
-ReviewDecision = Literal["fix_required", "approved", "rejected"]
+ReviewDecision = Literal["fix_required", "changes_requested", "approved", "rejected"]
 
 
 class CaseReviewCreateRequest(BaseModel):

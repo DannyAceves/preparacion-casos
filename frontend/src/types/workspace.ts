@@ -176,7 +176,7 @@ export interface ReviewRecord {
   case_id: string;
   review_type: "paralegal" | "attorney" | "qa";
   reviewer_reference: string;
-  decision: "fix_required" | "approved" | "rejected";
+  decision: "fix_required" | "changes_requested" | "approved" | "rejected";
   notes: string | null;
   reviewed_at: string | null;
   created_at: string;

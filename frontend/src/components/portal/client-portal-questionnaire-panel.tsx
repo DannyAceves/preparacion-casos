@@ -16,6 +16,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { RepeatableGroupField } from "@/components/questionnaire/repeatable-group-field";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import {
+  isRocI751CaseType,
+  localizeRocQuestion,
+  localizeRocRepeatableField,
+  localizeRocSection,
+} from "@/lib/roc-i751-localization";
 import { saveClientPortalAnswer } from "@/services/client-portal";
 import { CaseQuestionnaire, QuestionnaireQuestion } from "@/types/workspace";
 
@@ -29,16 +35,19 @@ function ClientPortalQuestionField({
   portalSessionToken,
   question,
   onRefresh,
+  isRocQuestionnaire,
 }: {
   portalSessionToken: string;
   question: QuestionnaireQuestion;
   onRefresh: () => Promise<void>;
+  isRocQuestionnaire: boolean;
 }): JSX.Element {
   const [draftValue, setDraftValue] = useState(getInitialQuestionValue(question));
   const [groupDraftValue, setGroupDraftValue] = useState(getInitialRepeatableGroupValue(question));
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const displayQuestion = isRocQuestionnaire ? localizeRocQuestion(question) : question;
 
   useEffect(() => {
     setDraftValue(getInitialQuestionValue(question));
@@ -71,10 +80,10 @@ function ClientPortalQuestionField({
   }
 
   function renderInput(): JSX.Element {
-    if (question.input_type === "text" || question.input_type === "textarea") {
+    if (displayQuestion.input_type === "text" || displayQuestion.input_type === "textarea") {
       return (
         <textarea
-          className="questionnaire-field__textarea"
+          className="questionnaire-field__textarea questionnaire-field__textarea--portal"
           value={draftValue}
           onChange={(event) => setDraftValue(event.target.value)}
           rows={4}
@@ -82,11 +91,11 @@ function ClientPortalQuestionField({
       );
     }
 
-    if (question.input_type === "date") {
+    if (displayQuestion.input_type === "date") {
       return <input type="date" value={draftValue} onChange={(event) => setDraftValue(event.target.value)} />;
     }
 
-    if (question.input_type === "boolean" || question.input_type === "checkbox") {
+    if (displayQuestion.input_type === "boolean" || displayQuestion.input_type === "checkbox") {
       return (
         <select value={draftValue} onChange={(event) => setDraftValue(event.target.value)}>
           <option value="">Seleccione una opcion</option>
@@ -96,11 +105,11 @@ function ClientPortalQuestionField({
       );
     }
 
-    if (question.input_type === "single_select" || question.input_type === "select") {
+    if (displayQuestion.input_type === "single_select" || displayQuestion.input_type === "select") {
       return (
         <select value={draftValue} onChange={(event) => setDraftValue(event.target.value)}>
           <option value="">Seleccione una opcion</option>
-          {(question.options ?? []).map((option) => (
+          {(displayQuestion.options ?? []).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -109,10 +118,10 @@ function ClientPortalQuestionField({
       );
     }
 
-    if (question.input_type === "radio") {
+    if (displayQuestion.input_type === "radio") {
       return (
-        <div className="questionnaire-choice-list">
-          {(question.options ?? []).map((option) => (
+        <div className="questionnaire-choice-list questionnaire-choice-list--portal">
+          {(displayQuestion.options ?? []).map((option) => (
             <label key={option.value} className="checklist-toggle">
               <input
                 type="radio"
@@ -128,7 +137,7 @@ function ClientPortalQuestionField({
       );
     }
 
-    if (question.input_type === "multi_select") {
+    if (displayQuestion.input_type === "multi_select") {
       return (
         <input
           value={draftValue}
@@ -138,20 +147,23 @@ function ClientPortalQuestionField({
       );
     }
 
-    if (question.input_type === "repeatable_group") {
+    if (displayQuestion.input_type === "repeatable_group") {
       return (
         <RepeatableGroupField
-          itemLabel={getRepeatableGroupItemLabel(question)}
-          fieldNames={getRepeatableGroupFieldNames(question)}
+          itemLabel={getRepeatableGroupItemLabel(displayQuestion)}
+          fieldNames={getRepeatableGroupFieldNames(displayQuestion)}
           value={groupDraftValue}
           onChange={setGroupDraftValue}
+          fieldLabelResolver={isRocQuestionnaire ? localizeRocRepeatableField : undefined}
+          itemDescription="Completa cada bloque con la informacion correspondiente."
+          addButtonLabel={`Agregar ${getRepeatableGroupItemLabel(displayQuestion).toLowerCase()}`}
         />
       );
     }
 
     return (
       <textarea
-        className="questionnaire-field__textarea"
+        className="questionnaire-field__textarea questionnaire-field__textarea--portal"
         value={draftValue}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraftValue(event.target.value)}
         rows={6}
@@ -161,15 +173,15 @@ function ClientPortalQuestionField({
   }
 
   return (
-    <div className="questionnaire-field">
-      <div className="questionnaire-field__header">
+    <div className="questionnaire-field questionnaire-field--portal">
+      <div className="questionnaire-field__header questionnaire-field__header--portal">
         <div>
-          <strong>{question.prompt}</strong>
-          <p>{question.is_required ? "Obligatoria" : "Opcional"}</p>
+          <strong>{displayQuestion.prompt}</strong>
+          <p>{displayQuestion.is_required ? "Respuesta obligatoria" : "Respuesta opcional"}</p>
         </div>
       </div>
 
-      {question.help_text ? <p className="questionnaire-field__help">{question.help_text}</p> : null}
+      {displayQuestion.help_text ? <p className="questionnaire-field__help">{displayQuestion.help_text}</p> : null}
 
       <label className="ui-field">
         <span>Respuesta</span>
@@ -203,29 +215,42 @@ export function ClientPortalQuestionnairePanel({
   }
 
   const questionsByKey = buildQuestionMap(questionnaire.sections);
+  const isRocQuestionnaire = isRocI751CaseType(questionnaire.case_type);
 
   return (
     <div className="page-stack">
-      {questionnaire.sections.map((section) => (
-        <Card
-          key={section.id}
-          title={section.title}
-          subtitle={section.description ?? "Completa cada pregunta y guarda tu avance conforme avances."}
-        >
-          <div className="page-stack">
-            {section.questions
-              .filter((question) => isQuestionVisible(question, questionsByKey))
-              .map((question) => (
-                <ClientPortalQuestionField
-                  key={question.id}
-                  portalSessionToken={portalSessionToken}
-                  question={question}
-                  onRefresh={onRefresh}
-                />
-              ))}
-          </div>
-        </Card>
-      ))}
+      {questionnaire.sections.map((section) => {
+        const localizedSection = isRocQuestionnaire
+          ? localizeRocSection(section.title, section.description)
+          : { title: section.title, description: section.description ?? null };
+
+        return (
+          <Card
+            key={section.id}
+            title={localizedSection.title}
+            subtitle={localizedSection.description ?? "Completa cada pregunta y guarda tu avance conforme avances."}
+          >
+            <div className="client-questionnaire-section">
+              <div className="client-questionnaire-section__intro">
+                <p>Guarda cada respuesta en cuanto la completes para no perder avance.</p>
+              </div>
+              <div className="client-questionnaire-grid">
+                {section.questions
+                  .filter((question) => isQuestionVisible(question, questionsByKey))
+                  .map((question) => (
+                    <ClientPortalQuestionField
+                      key={question.id}
+                      portalSessionToken={portalSessionToken}
+                      question={question}
+                      onRefresh={onRefresh}
+                      isRocQuestionnaire={isRocQuestionnaire}
+                    />
+                  ))}
+              </div>
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 }

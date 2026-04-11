@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +21,7 @@ from app.repositories.audit_log import AuditLogRepository
 from app.repositories.case_canonical_field import CaseCanonicalFieldRepository
 from app.repositories.case_packet import CasePacketRepository
 from app.repositories.document import DocumentRepository
+from app.repositories.document_checklist import CaseDocumentChecklistItemRepository
 from app.repositories.inconsistency import InconsistencyRepository
 from app.repositories.review import ReviewRepository
 from app.schemas.case_packet import CasePacketGenerateRequest
@@ -57,6 +59,7 @@ class CasePacketService:
         self.session = session
         self.case_packet_repository = CasePacketRepository(session)
         self.document_repository = DocumentRepository(session)
+        self.checklist_item_repository = CaseDocumentChecklistItemRepository(session)
         self.canonical_field_repository = CaseCanonicalFieldRepository(session)
         self.inconsistency_repository = InconsistencyRepository(session)
         self.review_repository = ReviewRepository(session)
@@ -72,6 +75,7 @@ class CasePacketService:
         current_documents = await self.document_repository.list_current_for_case(case_id)
         valid_documents = self._filter_valid_documents(current_documents)
         sorted_documents = self._sort_documents(valid_documents)
+        checklist_items = await self.checklist_item_repository.list_for_case(case_id)
         canonical_fields = await self.canonical_field_repository.list_for_case(case_id)
         inconsistencies = await self.inconsistency_repository.list_for_case(case_id)
         reviews = await self.review_repository.list_for_case(case_id)
@@ -89,6 +93,7 @@ class CasePacketService:
         )
         checklist_payload = self._build_checklist_payload(
             case_type=case.case_type,
+            checklist_items=checklist_items,
             documents=sorted_documents,
             inconsistencies=inconsistencies,
         )
@@ -100,16 +105,20 @@ class CasePacketService:
             document_index=document_index,
             checklist_payload=checklist_payload,
         )
+        summary_payload_json = self._to_jsonable(summary_payload)
+        document_index_json = self._to_jsonable(document_index)
+        checklist_payload_json = self._to_jsonable(checklist_payload)
+        export_artifact_json = self._to_jsonable(export_artifact)
         packet = await self.case_packet_repository.create(
             {
                 "case_id": case.id,
                 "packet_version": packet_version,
                 "packet_status": "generated",
                 "generated_by_reference": payload.generated_by_reference,
-                "summary_payload": summary_payload,
-                "document_index": document_index,
-                "checklist_payload": checklist_payload,
-                "export_artifact": export_artifact,
+                "summary_payload": summary_payload_json,
+                "document_index": document_index_json,
+                "checklist_payload": checklist_payload_json,
+                "export_artifact": export_artifact_json,
                 "generation_notes": payload.generation_notes,
                 "generated_at": generated_at,
             }
@@ -251,26 +260,42 @@ class CasePacketService:
         self,
         *,
         case_type: str,
+        checklist_items: list[object],
         documents: list[Document],
         inconsistencies: list[Inconsistency],
     ) -> list[dict[str, Any]]:
-        document_types_present = {document.document_type for document in documents}
+        if checklist_items:
+            items = [
+                {
+                    "item_key": f"document:{item.document_type or item.id}",
+                    "label": item.label,
+                    "status": "ready" if item.validated or item.received else "missing" if item.applies and item.requested else "warning",
+                    "required": bool(item.applies and item.requested),
+                    "related_document_type": item.document_type,
+                    "notes": item.observations,
+                }
+                for item in checklist_items
+                if item.applies
+            ]
+        else:
+            document_types_present = {document.document_type for document in documents}
+            required_documents = REQUIRED_DOCUMENTS_BY_CASE_TYPE.get(
+                case_type,
+                [("passport", "Passport"), ("evidence", "Supporting Evidence")],
+            )
+            items = [
+                {
+                    "item_key": f"document:{document_type}",
+                    "label": label,
+                    "status": "ready" if document_type in document_types_present else "missing",
+                    "required": True,
+                    "related_document_type": document_type,
+                    "notes": None if document_type in document_types_present else f"Missing recommended {label.lower()}.",
+                }
+                for document_type, label in required_documents
+            ]
+
         open_inconsistencies = [item for item in inconsistencies if item.status in {"open", "under_review"}]
-        required_documents = REQUIRED_DOCUMENTS_BY_CASE_TYPE.get(
-            case_type,
-            [("passport", "Passport"), ("evidence", "Supporting Evidence")],
-        )
-        items = [
-            {
-                "item_key": f"document:{document_type}",
-                "label": label,
-                "status": "ready" if document_type in document_types_present else "missing",
-                "required": True,
-                "related_document_type": document_type,
-                "notes": None if document_type in document_types_present else f"Missing recommended {label.lower()}.",
-            }
-            for document_type, label in required_documents
-        ]
         items.append(
             {
                 "item_key": "quality:inconsistencies",
@@ -313,6 +338,9 @@ class CasePacketService:
 
     def _humanize_document_type(self, document_type: str) -> str:
         return document_type.replace("_", " ").title()
+
+    def _to_jsonable(self, value: Any) -> Any:
+        return jsonable_encoder(value)
 
     async def _create_audit_log(
         self,

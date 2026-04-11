@@ -1,6 +1,5 @@
 import { apiClient } from "@/lib/api/client";
 import { appConfig } from "@/lib/config";
-import { ApiErrorPayload } from "@/types/api";
 import {
   ClientPortalAccess,
   ClientPortalContext,
@@ -18,6 +17,10 @@ interface ClientPortalDocumentUploadResponse {
   checklist: CaseDocumentChecklist;
 }
 
+interface ClientPortalRequestOptions {
+  headers?: HeadersInit;
+}
+
 function buildAbsoluteUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const baseUrl = typeof window === "undefined" ? appConfig.apiInternalBaseUrl : appConfig.apiBaseUrl;
@@ -30,27 +33,6 @@ async function parseJsonSafe<T>(response: Response): Promise<T | null> {
     return null;
   }
   return JSON.parse(text) as T;
-}
-
-async function getNullable<T>(path: string): Promise<T | null> {
-  const response = await fetch(buildAbsoluteUrl(path), {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const detail = await parseJsonSafe<unknown>(response);
-    throw {
-      message: `API request failed for ${path} (${response.status})`,
-      status: response.status,
-      detail,
-    } satisfies ApiErrorPayload;
-  }
-
-  return parseJsonSafe<T | null>(response);
 }
 
 function buildPortalAuthFormData(token: string, passcode: string): FormData {
@@ -126,15 +108,20 @@ function buildQuestionnaireValuePayload(input: SaveClientPortalAnswerInput): Cli
   return { answer_text: value.answer_text ?? "" };
 }
 
-export async function getCaseClientPortalAccess(caseId: string): Promise<ClientPortalAccess | null> {
-  return getNullable<ClientPortalAccess>(`/cases/${caseId}/client-portal/access`);
+export async function getCaseClientPortalAccess(
+  caseId: string,
+  options: ClientPortalRequestOptions = {},
+): Promise<ClientPortalAccess | null> {
+  return apiClient.get<ClientPortalAccess | null>(`/cases/${caseId}/client-portal/access`, options);
 }
 
 export async function issueCaseClientPortalAccess(
   caseId: string,
   input: IssueClientPortalAccessInput,
+  options: ClientPortalRequestOptions = {},
 ): Promise<ClientPortalIssuedAccess> {
   return apiClient.post<ClientPortalIssuedAccess>(`/cases/${caseId}/client-portal/access/issue`, {
+    ...options,
     body: JSON.stringify({
       instructions: input.instructions ?? null,
       expires_in_days: input.expires_in_days ?? 7,

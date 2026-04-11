@@ -12,6 +12,7 @@ import { FormFeedback } from "@/components/ui/form-feedback";
 import { FormField } from "@/components/ui/form-field";
 import { LoadingState } from "@/components/ui/loading-state";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import { openClientPortalPrintablePdf } from "@/lib/client-portal-print";
 import {
   authenticateClientPortal,
   getClientPortalContext,
@@ -58,7 +59,7 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
       sessionStorage.setItem(passcodeStorageKey(token), nextPasscode);
       sessionStorage.setItem(sessionStorageTokenKey(token), nextContext.session_token);
     } catch (loadError) {
-      setError(getApiErrorMessage(loadError, "Could not open the client portal."));
+      setError(getApiErrorMessage(loadError, "No se pudo abrir el portal del cliente."));
       if (!options?.silent) {
         setContext(null);
         sessionStorage.removeItem(passcodeStorageKey(token));
@@ -143,13 +144,24 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
     await loadPortalContext(passcode, { silent: true });
   }
 
+  function handlePrint(): void {
+    if (!context) {
+      return;
+    }
+    try {
+      openClientPortalPrintablePdf(context);
+    } catch (printError) {
+      setError(getApiErrorMessage(printError, "No se pudo preparar la version para PDF."));
+    }
+  }
+
   return (
     <main className="client-portal">
       <section className="client-portal__hero">
         <div>
           <span className="app-sidebar__eyebrow">Portal del Cliente</span>
           <h1>Cuestionario del caso y carga de documentos</h1>
-          <p>Usa el codigo seguro que te compartio tu equipo legal para continuar tu proceso y subir documentos.</p>
+          <p>Usa el codigo seguro que te compartio tu equipo legal para continuar tu proceso y cargar documentos con claridad.</p>
         </div>
       </section>
 
@@ -197,6 +209,14 @@ export function ClientPortalShell({ token }: ClientPortalShellProps): JSX.Elemen
                 <p className="client-portal__summary">
                   {context.case_summary ?? "Tu equipo legal preparo este portal para que completes tu informacion y subas archivos de forma segura."}
                 </p>
+                <div className="client-portal__actions">
+                  <button type="button" className="ui-button ui-button--ghost" onClick={() => void handleRefresh()}>
+                    Actualizar portal
+                  </button>
+                  <button type="button" className="ui-button" onClick={handlePrint}>
+                    Imprimir o guardar PDF
+                  </button>
+                </div>
                 <div className="client-portal__progress">
                   <div className="checklist-progress__bar">
                     <div
